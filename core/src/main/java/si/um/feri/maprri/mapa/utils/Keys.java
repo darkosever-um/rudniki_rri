@@ -1,0 +1,6 @@
+package si.um.feri.maprri.mapa.utils;
+
+public class Keys {
+    public static String MAPBOX = "";
+    public static String GEOAPIFY = "caeb7c23c18f45578df56a48ca37b655";
+}
