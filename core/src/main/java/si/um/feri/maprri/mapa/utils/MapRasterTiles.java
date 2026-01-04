@@ -1,5 +1,6 @@
 package si.um.feri.maprri.mapa.utils;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.math.Vector2;
@@ -32,6 +33,28 @@ public class MapRasterTiles {
 
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
     final static public int TILE_SIZE = 512;
+
+    // dinamični load
+    public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
+        new Thread(() -> {
+            try {
+                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+                ByteArrayOutputStream bis = fetchTile(url);
+                byte[] data = bis.toByteArray();
+
+                Gdx.app.postRunnable(() -> {
+                    Texture texture = getTexture(data);
+                    callback.onTileLoaded(texture, x, y);
+                });
+            } catch (IOException e) {
+                Gdx.app.error("MapRasterTiles", "Napaka pri nalaganju ploščice: " + zoom + "/" + x + "/" + y, e);
+            }
+        }).start();
+    }
+
+    public interface TileLoadedCallback {
+        void onTileLoaded(Texture texture, int x, int y); // override v Mapa.java
+    }
 
     /**
      * Get raster tile based on zoom and tile number.
