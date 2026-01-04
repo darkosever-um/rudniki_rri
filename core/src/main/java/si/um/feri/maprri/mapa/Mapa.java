@@ -40,7 +40,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private ZoomXY beginTile;   // top left tile
 
     // center geolocation
-    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.557314, 15.637771);
+    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.1199, 14.8153);
 
     // test marker
     private final Geolocation MARKER_GEOLOCATION = new Geolocation(46.559070, 15.638100);
@@ -48,7 +48,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
-
         camera = new OrthographicCamera();
         camera.setToOrtho(false, Constants.MAP_WIDTH, Constants.MAP_HEIGHT);
         camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
@@ -59,32 +58,15 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         touchPosition = new Vector3();
 
-        try {
-            //in most cases, geolocation won't be in the center of the tile because tile borders are predetermined (geolocation can be at the corner of a tile)
-            ZoomXY centerTile = MapRasterTiles.getTileNumber(CENTER_GEOLOCATION.lat, CENTER_GEOLOCATION.lng, Constants.ZOOM);
-            mapTiles = MapRasterTiles.getRasterTileZone(centerTile, Constants.NUM_TILES);
-            //you need the beginning tile (tile on the top left corner) to convert geolocation to a location in pixels.
-            beginTile = new ZoomXY(Constants.ZOOM, centerTile.x - ((Constants.NUM_TILES - 1) / 2), centerTile.y - ((Constants.NUM_TILES - 1) / 2));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        ZoomXY centerTile = MapRasterTiles.getTileNumber(CENTER_GEOLOCATION.lat, CENTER_GEOLOCATION.lng, Constants.ZOOM);
+        beginTile = new ZoomXY(Constants.ZOOM, centerTile.x - ((Constants.NUM_TILES - 1) / 2), centerTile.y - ((Constants.NUM_TILES - 1) / 2));
 
         tiledMap = new TiledMap();
-        MapLayers layers = tiledMap.getLayers();
-
         TiledMapTileLayer layer = new TiledMapTileLayer(Constants.NUM_TILES, Constants.NUM_TILES, MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE);
-        int index = 0;
-        for (int j = Constants.NUM_TILES - 1; j >= 0; j--) {
-            for (int i = 0; i < Constants.NUM_TILES; i++) {
-                TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
-                cell.setTile(new StaticTiledMapTile(new TextureRegion(mapTiles[index], MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE)));
-                layer.setCell(i, j, cell);
-                index++;
-            }
-        }
-        layers.add(layer);
-
+        tiledMap.getLayers().add(layer);
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
+
+        loadTilesAsync(layer);
     }
 
     @Override
@@ -169,6 +151,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     }
 
     private void handleInput() {
+
+        float moveFor = 12f; // 3f
+
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
             camera.zoom += 0.02;
         }
@@ -176,16 +161,16 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             camera.zoom -= 0.02;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-            camera.translate(-3, 0, 0);
+            camera.translate(-moveFor, 0, 0);
         }
         if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-            camera.translate(3, 0, 0);
+            camera.translate(moveFor, 0, 0);
         }
         if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-            camera.translate(0, -3, 0);
+            camera.translate(0, -moveFor, 0);
         }
         if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
-            camera.translate(0, 3, 0);
+            camera.translate(0, moveFor, 0);
         }
 
         camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
@@ -195,5 +180,31 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         camera.position.x = MathUtils.clamp(camera.position.x, effectiveViewportWidth / 2f, Constants.MAP_WIDTH - effectiveViewportWidth / 2f);
         camera.position.y = MathUtils.clamp(camera.position.y, effectiveViewportHeight / 2f, Constants.MAP_HEIGHT - effectiveViewportHeight / 2f);
+    }
+
+    private void loadTilesAsync(TiledMapTileLayer layer) {
+        int size = Constants.NUM_TILES;
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+
+                // Izračun X Y za ploščico
+                final int tileX = beginTile.x + i;
+                final int tileY = beginTile.y + (size - 1 - j); // flipnen j
+
+                final int cellX = i;
+                final int cellY = j;
+
+                MapRasterTiles.loadTileAsync(Constants.ZOOM, tileX, tileY, new MapRasterTiles.TileLoadedCallback() {
+                    @Override
+                    public void onTileLoaded(Texture texture, int x, int y) { // ko je nalozena slika
+                        TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
+                        cell.setTile(new StaticTiledMapTile(new TextureRegion(texture)));
+
+                        layer.setCell(cellX, cellY, cell); // setnemo v naš layer
+                    }
+                });
+            }
+        }
     }
 }
