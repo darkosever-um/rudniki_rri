@@ -22,6 +22,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 
 import java.io.IOException;
 
+import si.um.feri.maprri.ServerController;
 import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
@@ -38,6 +39,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
     private Texture[] mapTiles;
     private ZoomXY beginTile;   // top left tile
+
+    private ServerController server;
 
     // center geolocation
     private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.1199, 14.8153);
@@ -65,6 +68,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         TiledMapTileLayer layer = new TiledMapTileLayer(Constants.NUM_TILES, Constants.NUM_TILES, MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE);
         tiledMap.getLayers().add(layer);
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
+
+        server = new ServerController("http://127.0.0.1:8080");
+        server.getAllMines();
 
         loadTilesAsync(layer);
     }
