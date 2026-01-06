@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
@@ -31,6 +32,8 @@ public class Mine implements Json.Serializable {
     private List<Infrastructure> infrastructure;
     private List<Worker> workers;
     private Borders borders;
+
+    public static final Preferences jsonfile = Gdx.app.getPreferences("mines");
 
     public Mine() {
     }
@@ -130,7 +133,9 @@ public class Mine implements Json.Serializable {
             mineStr += item.toString();
         }
 
-        mineStr += "\nBORDERS: " + borders.toString();
+        if(borders != null){
+            mineStr += "\nBORDERS: " + borders.toString();
+        }
 
         return mineStr;
     }
@@ -207,5 +212,39 @@ public class Mine implements Json.Serializable {
         this.workers = json.readValue(ArrayList.class, Worker.class, jsonValue.get("workers"));
 
         this.borders = json.readValue(Borders.class, jsonValue.get("geometry"));
+    }
+
+    public static void saveMineToFile(Mine mine){
+        String mineStr = Mine.jsonfile.getString("MINES", "[]");
+        Json json = new Json();
+        List<Mine> mines = new ArrayList<>();
+        try{
+            mines = json.fromJson(ArrayList.class, Mine.class, mineStr);
+        } catch(Exception e){
+            Gdx.app.error("MINES", "error loading mines from file:", e);
+            return;
+        }
+        mines.add(mine);
+        saveMineListToFile(mines);
+    }
+
+    public static void saveMineListToFile(List<Mine> mines){
+        Json json = new Json();
+        String jsonStr = json.toJson(mines);
+
+        Mine.jsonfile.putString("MINES", jsonStr);
+        Mine.jsonfile.flush();
+    }
+
+    public static List<Mine> loadMineList(){
+        String mineStr = Mine.jsonfile.getString("MINES", "[]");
+        Json json = new Json();
+        List<Mine> mines = new ArrayList<>();
+        try{
+            mines = json.fromJson(ArrayList.class, Mine.class, mineStr);
+        } catch(Exception e){
+            Gdx.app.error("MINES", "error loading mines from file:", e);
+        }
+        return mines;
     }
 }

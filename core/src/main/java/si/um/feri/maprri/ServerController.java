@@ -60,7 +60,7 @@ public class ServerController {
         Mine mine = new Mine();
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.GET);
         String url = path + "/mine/get/" + mineId;
-        System.out.println("URL: " + url);
+//        System.out.println("URL: " + url);
         request.setUrl(url);
         request.setTimeOut(5000); //5s
 

@@ -19,6 +19,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import si.um.feri.maprri.ServerController;
@@ -71,30 +72,41 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
 
         server = new ServerController("http://127.0.0.1:8080");
-        server.getAllMines(new NetworkCallback<List<Mine>>() {
-            @Override
-            public void onSuccess(List<Mine> result) {
-                System.out.println("Success");
-                System.out.println("MINES size: " + result.size());
-            }
+        List<Mine> myMines = new ArrayList<>();
+//        server.getAllMines(new NetworkCallback<List<Mine>>() {
+//            @Override
+//            public void onSuccess(List<Mine> result) {
+//                System.out.println("Success");
+//                System.out.println("MINES size: " + result.size());
+//                myMines.addAll(result);
+//                //Save mines to json
+////                Mine.saveMineListToFile(myMines);
+//                System.out.println("MY MINES SAVED");
+//            }
+//
+//            @Override
+//            public void onError(Throwable t) {
+//                System.out.println("ERROR:" + t.toString());
+//            }
+//        });
+//        server.getMine(new NetworkCallback<Mine>() {
+//            @Override
+//            public void onSuccess(Mine result) {
+//                System.out.println("Success");
+//                System.out.println("MINE: " + result.toString());
+//                Mine.saveMineToFile(result);
+//                System.out.println("1 MINE SAVED");
+//            }
+//
+//            @Override
+//            public void onError(Throwable t) {
+//                System.out.println("ERROR:" + t.toString());
+//            }
+//        }, "27bc35d1c5e248bfbb89977a");
 
-            @Override
-            public void onError(Throwable t) {
-                System.out.println("ERROR:" + t.toString());
-            }
-        });
-        server.getMine(new NetworkCallback<Mine>() {
-            @Override
-            public void onSuccess(Mine result) {
-                System.out.println("Success");
-                System.out.println("MINE: " + result.toString());
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                System.out.println("ERROR:" + t.toString());
-            }
-        }, "373b58e1e9984281901bc4ee");
+        myMines = Mine.loadMineList();
+        System.out.println(myMines.size());
+        System.out.println(myMines.toString());
 
         loadTilesAsync(layer);
     }

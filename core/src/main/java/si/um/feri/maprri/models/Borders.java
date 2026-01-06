@@ -53,7 +53,9 @@ public class Borders implements Json.Serializable{
         String str = "ID: " + id + "\n"
             + "Mine id: " + mineId + "\n"
             + "Type: " + type + "\n";
+        if(coordinates != null){
             str += "Coordinates: " + java.util.Arrays.deepToString(coordinates);
+        }
         return  str;
     }
 }
