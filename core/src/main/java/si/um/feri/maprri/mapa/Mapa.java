@@ -9,7 +9,6 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.input.GestureDetector;
-import com.badlogic.gdx.maps.MapLayers;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
@@ -20,13 +19,15 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
 
-import java.io.IOException;
+import java.util.List;
 
 import si.um.feri.maprri.ServerController;
 import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
+import si.um.feri.maprri.models.Mine;
+import si.um.feri.maprri.util.NetworkCallback;
 
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
 
@@ -70,7 +71,30 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
 
         server = new ServerController("http://127.0.0.1:8080");
-        server.getAllMines();
+        server.getAllMines(new NetworkCallback<List<Mine>>() {
+            @Override
+            public void onSuccess(List<Mine> result) {
+                System.out.println("Success");
+                System.out.println("MINES size: " + result.size());
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                System.out.println("ERROR:" + t.toString());
+            }
+        });
+        server.getMine(new NetworkCallback<Mine>() {
+            @Override
+            public void onSuccess(Mine result) {
+                System.out.println("Success");
+                System.out.println("MINE: " + result.toString());
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                System.out.println("ERROR:" + t.toString());
+            }
+        }, "373b58e1e9984281901bc4ee");
 
         loadTilesAsync(layer);
     }

@@ -1,11 +1,18 @@
 package si.um.feri.maprri.models;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonReader;
+import com.badlogic.gdx.utils.JsonValue;
 import si.um.feri.maprri.models.enums.MineStatus;
 import si.um.feri.maprri.models.enums.MineType;
+import si.um.feri.maprri.models.util.MongoDate;
+import si.um.feri.maprri.models.util.MongoID;
 
-public class Mine {
-
+public class Mine implements Json.Serializable {
     private String id;
     private String name;
     private String municipality;
@@ -16,18 +23,21 @@ public class Mine {
     private String ownerId;
     private MineStatus status;
     private MineType type;
+    private long created;
+    private long modified;
 
     // Using Lists for vectors
     private List<Mineral> minerals;
     private List<Infrastructure> infrastructure;
     private List<Worker> workers;
+    private Borders borders;
 
     public Mine() {
     }
 
     public Mine(String name, String ownerId, MineStatus status, MineType type,
                      List<Mineral> minerals, List<Infrastructure> infrastructure, List<Worker> workers, String municipality,
-                     Integer startYear, Integer endYear, Double lon, Double lat) {
+                     Integer startYear, Integer endYear, Double lon, Double lat, long created, long modified) {
 
         this.name = name;
         this.ownerId = ownerId;
@@ -41,6 +51,8 @@ public class Mine {
         this.endYear = endYear;
         this.lon = lon;
         this.lat = lat;
+        this.created = created;
+        this.modified = modified;
     }
 
     // Preveri ali so podatki validi
@@ -59,5 +71,141 @@ public class Mine {
             type != null &&
             isLocationValid &&
             areYearsValid;
+    }
+
+    public static Mine getMineFromJson(String jsonStr){
+        try{
+            Json json = new Json();
+            json.setIgnoreUnknownFields(true);
+            return json.fromJson(Mine.class, jsonStr);
+        } catch (Exception e) {
+            Gdx.app.error("MINE", "error loading mines:", e);
+        }
+        return null;
+    }
+
+    public static List<Mine> getMineListFromJson(String jsonStr){
+        List<Mine> mines = new ArrayList<>();
+
+        try{
+            Json json = new Json();
+            json.setIgnoreUnknownFields(true);
+
+            JsonValue jsonValue = new JsonReader().parse(jsonStr);
+
+            for (JsonValue entry : jsonValue) {
+                Mine m = json.readValue(Mine.class, entry);
+                mines.add(m);
+            }
+
+        } catch (Exception e) {
+            Gdx.app.error("MINE", "error loading mines:", e);
+        }
+        return mines;
+    }
+
+
+    public String toString(){
+        String mineStr =  id + "\n"
+            + "Name: " + name + "\n"
+            + "Municipality: " + municipality + "\n"
+            + "Start year: " + startYear + "\n"
+            + "End year: " + endYear + "\n"
+            + "Locataion: (" + lon + "," + lat + ")\n"
+            + "Owner id: " + ownerId + "\n"
+            + "Status: " + status + "\n"
+            + "Type: " + type + "\n"
+            + "Date created: " + created + "\n"
+            + "Date modified: " + modified + "\n";
+        mineStr += "\nMINERALS: ";
+        for(Mineral item : minerals){
+            mineStr += item.toString();
+        }
+        mineStr += "\nINFRASTRUCTURE: ";
+        for(Infrastructure item : infrastructure){
+            mineStr += item.toString();
+        }
+        mineStr += "\nWORKERS: ";
+        for(Worker item : workers){
+            mineStr += item.toString();
+        }
+
+        mineStr += "\nBORDERS: " + borders.toString();
+
+        return mineStr;
+    }
+
+    @Override
+    public void write(Json json) {
+        if (id != null) {
+            json.writeObjectStart("_id");
+            json.writeValue("$oid", id);
+            json.writeObjectEnd();
+        }
+        json.writeValue("name", name);
+        json.writeValue("municipality", municipality);
+        json.writeValue("startYear", startYear);
+        json.writeValue("endYear", endYear);
+        json.writeValue("lat", lat);
+        json.writeValue("lon", lon);
+
+        json.writeObjectStart("ownerId");
+        json.writeValue("$oid", ownerId);
+        json.writeObjectEnd();
+
+        json.writeValue("status", status.ordinal());
+        json.writeValue("type", type.ordinal());
+
+        json.writeObjectStart("modified");
+        json.writeValue("$date", modified);
+        json.writeObjectEnd();
+
+        json.writeObjectStart("created");
+        json.writeValue("$date", created);
+        json.writeObjectEnd();
+
+        json.writeValue("minerals", minerals, List.class, Mineral.class);
+        json.writeValue("infrastructure", infrastructure, List.class, Infrastructure.class);
+        json.writeValue("workers", workers, List.class, Worker.class);
+
+        json.writeValue("geometry", borders, Borders.class);
+    }
+
+    @Override
+    public void read(Json json, JsonValue jsonValue) {
+        if (jsonValue.has("_id")) {
+            this.id = jsonValue.get("_id").getString("$oid");
+        }
+
+        if (jsonValue.has("ownerId") && !jsonValue.get("ownerId").isNull()) {
+            this.ownerId = jsonValue.get("ownerId").getString("$oid");
+        } else {
+            //Scraped mines
+            this.ownerId = null;
+        }
+
+        if (jsonValue.has("created")) {
+            this.created = jsonValue.get("created").getLong("$date");
+        }
+
+        if (jsonValue.has("modified")) {
+            this.modified = jsonValue.get("modified").getLong("$date");
+        }
+
+        this.name = jsonValue.getString("name", null);
+        this.municipality = jsonValue.getString("municipality", null);
+        this.startYear = jsonValue.getInt("startYear", 0);
+        this.endYear = jsonValue.getInt("endYear", 0);
+        this.lon = jsonValue.getDouble("lon", 0.0);
+        this.lat = jsonValue.getDouble("lat", 0.0);
+
+        this.status = MineStatus.values()[jsonValue.getInt("status", 0)];
+        this.type = MineType.values()[jsonValue.getInt("type", 0)];
+
+        this.minerals = json.readValue(ArrayList.class, Mineral.class, jsonValue.get("minerals"));
+        this.infrastructure = json.readValue(ArrayList.class, Infrastructure.class, jsonValue.get("infrastructure"));
+        this.workers = json.readValue(ArrayList.class, Worker.class, jsonValue.get("workers"));
+
+        this.borders = json.readValue(Borders.class, jsonValue.get("geometry"));
     }
 }
