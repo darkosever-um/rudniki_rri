@@ -2,6 +2,7 @@ package si.um.feri.maprri.models;
 
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Borders implements Json.Serializable {
@@ -23,7 +24,7 @@ public class Borders implements Json.Serializable {
         }
 
         json.writeObjectStart("geometry");
-        json.writeValue("type", type);
+        json.writeValue("type", "MultiPolygon");
         json.writeValue("coordinates", coordinates);
         json.writeObjectEnd();
     }
@@ -31,68 +32,75 @@ public class Borders implements Json.Serializable {
     @Override
     public void read(Json json, JsonValue jsonValue) {
         JsonValue idObj = jsonValue.get("_id");
-        if (idObj != null && idObj.has("$oid")) {
-            this.id = idObj.getString("$oid");
-        }
+        if (idObj != null && idObj.has("$oid")) this.id = idObj.getString("$oid");
 
         JsonValue mineIdObj = jsonValue.get("mineId");
-        if (mineIdObj != null && mineIdObj.has("$oid")) {
-            this.mineId = mineIdObj.getString("$oid");
-        }
+        if (mineIdObj != null && mineIdObj.has("$oid")) this.mineId = mineIdObj.getString("$oid");
 
         JsonValue geometryNode = jsonValue.get("geometry");
-
-        if (geometryNode == null && jsonValue.has("coordinates")) {
-            geometryNode = jsonValue;
-        }
+        if (geometryNode == null && jsonValue.has("coordinates")) geometryNode = jsonValue;
 
         if (geometryNode != null) {
             this.type = geometryNode.getString("type", "MultiPolygon");
             JsonValue coordsJson = geometryNode.get("coordinates");
 
-            if (coordsJson != null && !coordsJson.isNull()) {
+            if (coordsJson != null && !coordsJson.isNull() && coordsJson.size > 0) {
                 try {
-                    if ("MultiPolygon".equalsIgnoreCase(this.type)) {
-                        this.coordinates = new float[coordsJson.size][][][];
-                        for (int i = 0; i < coordsJson.size; i++) {
+                    int depth = getArrayDepth(coordsJson);
+
+                    if (depth == 4) {
+                        // MultiPolygon: [ [ [ [x,y] ] ] ]
+                        int polyCount = coordsJson.size;
+                        this.coordinates = new float[polyCount][][][];
+                        for (int i = 0; i < polyCount; i++) {
                             this.coordinates[i] = parsePolygon(coordsJson.get(i));
                         }
-                    } else {
-                        float[][][] simplePoly = parsePolygon(coordsJson);
-                        this.coordinates = new float[][][][]{simplePoly};
+                    } else if (depth == 3) {
+                        // Polygon: [ [ [x,y] ] ]
+                        this.coordinates = new float[1][][][];
+                        this.coordinates[0] = parsePolygon(coordsJson);
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
                     System.err.println("Error parsing coordinates for ID: " + this.id);
                 }
             }
-        } else {
-            System.err.println("Warning: Geometry node missing for ID: " + this.id);
         }
     }
 
     private float[][][] parsePolygon(JsonValue polygonJson) {
-        float[][][] polygon = new float[polygonJson.size][][];
-        for (int i = 0; i < polygonJson.size; i++) {
+        // polygonJson is array of rings
+        int ringCount = polygonJson.size;
+        float[][][] polygon = new float[ringCount][][];
+
+        for (int i = 0; i < ringCount; i++) {
             JsonValue ringJson = polygonJson.get(i);
-            polygon[i] = new float[ringJson.size][2];
-            for (int j = 0; j < ringJson.size; j++) {
+            int pointCount = ringJson.size;
+            polygon[i] = new float[pointCount][2];
+
+            for (int j = 0; j < pointCount; j++) {
                 JsonValue pointJson = ringJson.get(j);
-                polygon[i][j][0] = pointJson.getFloat(0);
-                polygon[i][j][1] = pointJson.getFloat(1);
+
+                if (pointJson.size >= 2) {
+                    polygon[i][j][0] = pointJson.get(0).asFloat();
+                    polygon[i][j][1] = pointJson.get(1).asFloat();
+                }
             }
         }
         return polygon;
     }
 
+    private int getArrayDepth(JsonValue val) {
+        int depth = 0;
+        JsonValue current = val;
+        while (current != null && current.isArray() && current.size > 0) {
+            depth++;
+            current = current.get(0);
+        }
+        return depth;
+    }
+
     @Override
     public String toString() {
-        String str = "ID: " + id + "\n"
-            + "Mine id: " + mineId + "\n"
-            + "Type: " + type + "\n";
-        if(coordinates != null){
-            str += "Coordinates: " + Arrays.deepToString(coordinates);
-        }
-        return str;
+        return "Borders ID: " + id;
     }
 }
