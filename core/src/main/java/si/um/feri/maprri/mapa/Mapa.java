@@ -73,36 +73,24 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         server = new ServerController("http://127.0.0.1:8080");
         List<Mine> myMines = new ArrayList<>();
-//        server.getAllMines(new NetworkCallback<List<Mine>>() {
-//            @Override
-//            public void onSuccess(List<Mine> result) {
-//                System.out.println("Success");
-//                System.out.println("MINES size: " + result.size());
-//                myMines.addAll(result);
-//                //Save mines to json
-////                Mine.saveMineListToFile(myMines);
-//                System.out.println("MY MINES SAVED");
-//            }
-//
-//            @Override
-//            public void onError(Throwable t) {
-//                System.out.println("ERROR:" + t.toString());
-//            }
-//        });
-//        server.getMine(new NetworkCallback<Mine>() {
-//            @Override
-//            public void onSuccess(Mine result) {
-//                System.out.println("Success");
-//                System.out.println("MINE: " + result.toString());
-//                Mine.saveMineToFile(result);
-//                System.out.println("1 MINE SAVED");
-//            }
-//
-//            @Override
-//            public void onError(Throwable t) {
-//                System.out.println("ERROR:" + t.toString());
-//            }
-//        }, "27bc35d1c5e248bfbb89977a");
+
+        List<Mine> finalMyMines = myMines;
+        server.getAllMines(new NetworkCallback<List<Mine>>() {
+            @Override
+            public void onSuccess(List<Mine> result) {
+                System.out.println("Success");
+                System.out.println("MINES size: " + result.size());
+                finalMyMines.addAll(result);
+
+                Mine.saveMineListToFile(finalMyMines);
+                System.out.println("MY MINES SAVED");
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                System.out.println("ERROR:" + t.toString());
+            }
+        });
 
         myMines = Mine.loadMineList();
         System.out.println(myMines.size());
