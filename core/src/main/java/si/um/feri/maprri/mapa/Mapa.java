@@ -3,6 +3,8 @@ package si.um.feri.maprri.mapa;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -15,9 +17,11 @@ import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.maps.tiled.tiles.StaticTiledMapTile;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Polygon;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.ShortArray;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +31,7 @@ import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
+import si.um.feri.maprri.models.Borders;
 import si.um.feri.maprri.models.Mine;
 import si.um.feri.maprri.util.NetworkCallback;
 
@@ -43,6 +48,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private ZoomXY beginTile;   // top left tile
 
     private ServerController server;
+
+    private List<Mine> myMines;
 
     // center geolocation
     private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.1199, 14.8153);
@@ -72,41 +79,64 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
 
         server = new ServerController("http://127.0.0.1:8080");
-        List<Mine> myMines = new ArrayList<>();
-//        server.getAllMines(new NetworkCallback<List<Mine>>() {
-//            @Override
-//            public void onSuccess(List<Mine> result) {
-//                System.out.println("Success");
-//                System.out.println("MINES size: " + result.size());
-//                myMines.addAll(result);
-//                //Save mines to json
-////                Mine.saveMineListToFile(myMines);
-//                System.out.println("MY MINES SAVED");
-//            }
-//
-//            @Override
-//            public void onError(Throwable t) {
-//                System.out.println("ERROR:" + t.toString());
-//            }
-//        });
-//        server.getMine(new NetworkCallback<Mine>() {
-//            @Override
-//            public void onSuccess(Mine result) {
-//                System.out.println("Success");
-//                System.out.println("MINE: " + result.toString());
-//                Mine.saveMineToFile(result);
-//                System.out.println("1 MINE SAVED");
-//            }
-//
-//            @Override
-//            public void onError(Throwable t) {
-//                System.out.println("ERROR:" + t.toString());
-//            }
-//        }, "27bc35d1c5e248bfbb89977a");
+        myMines = new ArrayList<>();
+
+        List<Mine> finalMyMines = myMines;
+        server.getAllMines(new NetworkCallback<List<Mine>>() {
+            @Override
+            public void onSuccess(List<Mine> result) {
+                System.out.println("Success");
+                System.out.println("MINES size: " + result.size());
+                finalMyMines.addAll(result);
+
+                Mine.saveMineListToFile(finalMyMines);
+                System.out.println("MY MINES SAVED");
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                System.out.println("ERROR:" + t.toString());
+            }
+        });
 
         myMines = Mine.loadMineList();
         System.out.println(myMines.size());
         System.out.println(myMines.toString());
+
+        server.getAllMines(new NetworkCallback<List<Mine>>() {
+            @Override
+            public void onSuccess(List<Mine> result) {
+                Gdx.app.postRunnable(() -> {
+                    myMines.clear();
+                    myMines.addAll(result);
+                    Mine.saveMineListToFile(result);
+                    System.out.println("Mines loaded: " + myMines.size());
+                });
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                System.out.println("ERROR: " + t.toString());
+            }
+        });
+
+
+        InputMultiplexer multiplexer = new InputMultiplexer();
+
+        multiplexer.addProcessor(new GestureDetector(this));
+
+        multiplexer.addProcessor(new InputAdapter() {
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                camera.zoom += amountY * 0.1f;
+
+                camera.zoom = MathUtils.clamp(camera.zoom, 0.1f, 3.0f);
+
+                return true;
+            }
+        });
+
+        Gdx.input.setInputProcessor(multiplexer);
 
         loadTilesAsync(layer);
     }
@@ -122,6 +152,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer.setView(camera);
         tiledMapRenderer.render();
 
+        drawMines();
+
         drawMarkers();
     }
 
@@ -133,6 +165,61 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.circle(marker.x, marker.y, 10);
         shapeRenderer.end();
+    }
+
+    private void drawMines() {
+        if (myMines == null || myMines.isEmpty()) return;
+
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.BLUE);
+
+        for (Mine mine : myMines) {
+            if (mine.geometry == null) continue;
+
+            for (Borders border : mine.geometry) {
+                if (border.coordinates == null) continue;
+
+                // Vsi poligoni
+                for (int i = 0; i < border.coordinates.length; i++) {
+                    float[][][] polygon = border.coordinates[i];
+
+                    // Skozi vse točke
+                    for (int j = 0; j < polygon.length; j++) {
+                        float[][] ring = polygon[j];
+
+                        if (ring.length < 2) continue;
+
+                        for (int k = 0; k < ring.length - 1; k++) {
+                            float lon1 = ring[k][0];
+                            float lat1 = ring[k][1];
+                            float lon2 = ring[k+1][0];
+                            float lat2 = ring[k+1][1];
+
+                            Vector2 p1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y);
+                            Vector2 p2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y);
+
+                            shapeRenderer.line(p1.x, p1.y, p2.x, p2.y);
+                        }
+                    }
+                }
+            }
+        }
+        shapeRenderer.end();
+    }
+
+    private class DisplayMine {
+        Mine originalData;
+        List<Polygon> hitboxes;
+        List<float[]> triangulatedVertices;
+        List<ShortArray> triangleIndices;
+
+        public DisplayMine(Mine mine) {
+            this.originalData = mine;
+            this.hitboxes = new ArrayList<>();
+            this.triangulatedVertices = new ArrayList<>();
+            this.triangleIndices = new ArrayList<>();
+        }
     }
 
     @Override

@@ -10,8 +10,6 @@ import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 import si.um.feri.maprri.models.enums.MineStatus;
 import si.um.feri.maprri.models.enums.MineType;
-import si.um.feri.maprri.models.util.MongoDate;
-import si.um.feri.maprri.models.util.MongoID;
 
 public class Mine implements Json.Serializable {
     private String id;
@@ -27,11 +25,11 @@ public class Mine implements Json.Serializable {
     private long created;
     private long modified;
 
-    // Using Lists for vectors
     private List<Mineral> minerals;
     private List<Infrastructure> infrastructure;
     private List<Worker> workers;
-    private Borders borders;
+
+    public ArrayList<Borders> geometry;
 
     public static final Preferences jsonfile = Gdx.app.getPreferences("mines");
 
@@ -39,8 +37,8 @@ public class Mine implements Json.Serializable {
     }
 
     public Mine(String name, String ownerId, MineStatus status, MineType type,
-                     List<Mineral> minerals, List<Infrastructure> infrastructure, List<Worker> workers, String municipality,
-                     Integer startYear, Integer endYear, Double lon, Double lat, long created, long modified) {
+                List<Mineral> minerals, List<Infrastructure> infrastructure, List<Worker> workers, String municipality,
+                Integer startYear, Integer endYear, Double lon, Double lat, long created, long modified) {
 
         this.name = name;
         this.ownerId = ownerId;
@@ -60,7 +58,6 @@ public class Mine implements Json.Serializable {
 
     // Preveri ali so podatki validi
     public boolean validateMineData() {
-
         boolean isLocationValid = (lat != null && lat >= -90.0 && lat <= 90.0) &&
             (lon != null && lon >= -180.0 && lon <= 180.0);
 
@@ -107,39 +104,6 @@ public class Mine implements Json.Serializable {
         return mines;
     }
 
-
-    public String toString(){
-        String mineStr =  id + "\n"
-            + "Name: " + name + "\n"
-            + "Municipality: " + municipality + "\n"
-            + "Start year: " + startYear + "\n"
-            + "End year: " + endYear + "\n"
-            + "Locataion: (" + lon + "," + lat + ")\n"
-            + "Owner id: " + ownerId + "\n"
-            + "Status: " + status + "\n"
-            + "Type: " + type + "\n"
-            + "Date created: " + created + "\n"
-            + "Date modified: " + modified + "\n";
-        mineStr += "\nMINERALS: ";
-        for(Mineral item : minerals){
-            mineStr += item.toString();
-        }
-        mineStr += "\nINFRASTRUCTURE: ";
-        for(Infrastructure item : infrastructure){
-            mineStr += item.toString();
-        }
-        mineStr += "\nWORKERS: ";
-        for(Worker item : workers){
-            mineStr += item.toString();
-        }
-
-        if(borders != null){
-            mineStr += "\nBORDERS: " + borders.toString();
-        }
-
-        return mineStr;
-    }
-
     @Override
     public void write(Json json) {
         if (id != null) {
@@ -158,8 +122,8 @@ public class Mine implements Json.Serializable {
         json.writeValue("$oid", ownerId);
         json.writeObjectEnd();
 
-        json.writeValue("status", status.ordinal());
-        json.writeValue("type", type.ordinal());
+        json.writeValue("status", status != null ? status.ordinal() : 0);
+        json.writeValue("type", type != null ? type.ordinal() : 0);
 
         json.writeObjectStart("modified");
         json.writeValue("$date", modified);
@@ -173,7 +137,7 @@ public class Mine implements Json.Serializable {
         json.writeValue("infrastructure", infrastructure, List.class, Infrastructure.class);
         json.writeValue("workers", workers, List.class, Worker.class);
 
-        json.writeValue("geometry", borders, Borders.class);
+        json.writeValue("geometry", geometry, ArrayList.class, Borders.class);
     }
 
     @Override
@@ -185,7 +149,6 @@ public class Mine implements Json.Serializable {
         if (jsonValue.has("ownerId") && !jsonValue.get("ownerId").isNull()) {
             this.ownerId = jsonValue.get("ownerId").getString("$oid");
         } else {
-            //Scraped mines
             this.ownerId = null;
         }
 
@@ -211,7 +174,11 @@ public class Mine implements Json.Serializable {
         this.infrastructure = json.readValue(ArrayList.class, Infrastructure.class, jsonValue.get("infrastructure"));
         this.workers = json.readValue(ArrayList.class, Worker.class, jsonValue.get("workers"));
 
-        this.borders = json.readValue(Borders.class, jsonValue.get("geometry"));
+        if (jsonValue.has("geometry") && !jsonValue.get("geometry").isNull()) {
+            this.geometry = json.readValue(ArrayList.class, Borders.class, jsonValue.get("geometry"));
+        } else {
+            this.geometry = new ArrayList<>();
+        }
     }
 
     public static void saveMineToFile(Mine mine){
@@ -222,7 +189,7 @@ public class Mine implements Json.Serializable {
             mines = json.fromJson(ArrayList.class, Mine.class, mineStr);
         } catch(Exception e){
             Gdx.app.error("MINES", "error loading mines from file:", e);
-            return;
+            mines = new ArrayList<>();
         }
         mines.add(mine);
         saveMineListToFile(mines);
@@ -231,7 +198,6 @@ public class Mine implements Json.Serializable {
     public static void saveMineListToFile(List<Mine> mines){
         Json json = new Json();
         String jsonStr = json.toJson(mines);
-
         Mine.jsonfile.putString("MINES", jsonStr);
         Mine.jsonfile.flush();
     }
