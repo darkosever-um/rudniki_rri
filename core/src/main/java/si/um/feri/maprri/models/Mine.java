@@ -213,4 +213,12 @@ public class Mine implements Json.Serializable {
         }
         return mines;
     }
+
+    public List<Worker> getWorkers(){
+        return workers;
+    }
+
+    public String getName() {
+        return name;
+    }
 }
