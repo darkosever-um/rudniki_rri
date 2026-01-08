@@ -1,33 +1,47 @@
 package si.um.feri.maprri.models;
 
-import si.um.feri.maprri.models.enums.WorkerType;
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonValue;
 
-public class Worker {
+public class Worker implements Json.Serializable {
+    public String firstName;
+    public String lastName;
+    public long birthDate;
+    public int idNumber;
+    public int type;
+    public double salary;
 
-    private String firstName;
-    private String lastName;
-    private Long birthDate;
-    private Integer IDNumber;
-    private WorkerType type;
-    private Double salary;
+    public Worker() {}
 
-    public Worker() {
+    @Override
+    public void write(Json json) {
+        json.writeValue("firstName", firstName);
+        json.writeValue("lastName", lastName);
+
+        json.writeObjectStart("birthDate");
+        json.writeValue("$date", birthDate);
+        json.writeObjectEnd();
+
+        json.writeValue("IDNumber", idNumber);
+        json.writeValue("type", type);
+        json.writeValue("salary", salary);
     }
 
-    public Worker(String firstName, String lastName, Long birthDate, Integer IDNumber, WorkerType type, Double salary) {
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.birthDate = birthDate;
-        this.IDNumber = IDNumber;
-        this.type = type;
-        this.salary = salary;
-    }
+    @Override
+    public void read(Json json, JsonValue jsonValue) {
+        firstName = jsonValue.getString("firstName");
+        lastName = jsonValue.getString("lastName");
+        idNumber = jsonValue.getInt("IDNumber");
+        type = jsonValue.getInt("type");
+        salary = jsonValue.getDouble("salary");
 
-    // Preveri da ni nič null
-    public boolean validateWorkers() {
-        return firstName != null && !firstName.isEmpty() &&
-            lastName != null && !lastName.isEmpty() &&
-            type != null &&
-            IDNumber != null;
+        if (jsonValue.has("birthDate")) {
+            JsonValue dateObj = jsonValue.get("birthDate");
+            if (dateObj != null && dateObj.has("$date") && !dateObj.get("$date").isNull()) {
+                birthDate = dateObj.getLong("$date");
+            } else {
+                birthDate = 0;
+            }
+        }
     }
 }
