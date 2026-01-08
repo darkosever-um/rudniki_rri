@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonReader;
@@ -220,5 +221,9 @@ public class Mine implements Json.Serializable {
 
     public String getName() {
         return name;
+    }
+
+    public List<Infrastructure> getInfrastructures() {
+        return infrastructure;
     }
 }

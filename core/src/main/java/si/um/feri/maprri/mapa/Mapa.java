@@ -153,21 +153,20 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer.render();
 
         drawMines();
-        drawWorkersInMines();
 
-//        drawMarkers();
+        // ture da se izrišejo delavci pa ture da se izrisrejo infrastrukture
+        drawMineEntities(true, true);
+
     }
 
-    private void drawWorkersInMines() {
-        if (myMines == null || myMines.isEmpty()) return;
+    private void drawMineEntities(boolean showWorkers, boolean showInfra) {
+        if (myMines == null || myMines.isEmpty() || (!showWorkers && !showInfra)) return;
 
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         for (Mine mine : myMines) {
-            if (mine.getWorkers() == null || mine.getWorkers().isEmpty() || mine.geometry == null) continue;
-
-            java.util.Random random = new java.util.Random(mine.getName().hashCode());
+            if (mine.geometry == null) continue;
 
             for (Borders border : mine.geometry) {
                 if (border.coordinates == null) continue;
@@ -176,10 +175,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     float[][][] polygonData = border.coordinates[i];
                     if (polygonData.length == 0) continue;
 
-                    // vzemem prvi poligon ki je zunanja meja
+                    // samo enkrat za rudnik izracunamo gi lehko risemo
                     float[][] outerRing = polygonData[0];
-
-                    // geo tocke v pixle nato v libgdx poligon
                     float[] vertices = new float[outerRing.length * 2];
                     float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
                     float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
@@ -189,35 +186,23 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                         vertices[k * 2] = pixelPos.x;
                         vertices[k * 2 + 1] = pixelPos.y;
 
-                        // iskanje robov
                         if (pixelPos.x < minX) minX = pixelPos.x;
                         if (pixelPos.x > maxX) maxX = pixelPos.x;
                         if (pixelPos.y < minY) minY = pixelPos.y;
                         if (pixelPos.y > maxY) maxY = pixelPos.y;
                     }
-
                     Polygon libGdxPolygon = new Polygon(vertices);
 
-                    // generiramo tocko za vsak worker
-                    int workersToDraw = mine.getWorkers().size();
-                    for (int w = 0; w < workersToDraw; w++) {
-                        float randomX = 0, randomY = 0;
-                        boolean found = false;
-                        int attempts = 0;
+                    // inftrastrukture
+                    if (showInfra && mine.getInfrastructures() != null) {
+                        drawRandomDotsInPolygon(mine.getInfrastructures().size(), libGdxPolygon, minX, maxX, minY, maxY,
+                            Color.RED, 4.0f, mine.getName().hashCode() + 123);
+                    }
 
-                        while (!found && attempts < 20) {
-                            randomX = minX + random.nextFloat() * (maxX - minX);
-                            randomY = minY + random.nextFloat() * (maxY - minY);
-
-                            if (libGdxPolygon.contains(randomX, randomY)) {
-                                found = true;
-                            }
-                            attempts++;
-                        }
-
-                        if (found) {
-                            drawMarkersWorker(randomX, randomY);
-                        }
+                    // workerji
+                    if (showWorkers && mine.getWorkers() != null) {
+                        drawRandomDotsInPolygon(mine.getWorkers().size(), libGdxPolygon, minX, maxX, minY, maxY,
+                            Color.ORANGE, 3.0f, mine.getName().hashCode());
                     }
                 }
             }
@@ -225,12 +210,32 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         shapeRenderer.end();
     }
 
-    private void drawMarkersWorker(float x, float y) {
-        float dynamicRadius = 3.0f * camera.zoom;
-        if(dynamicRadius < 1f) dynamicRadius = 1f;
+    private void drawRandomDotsInPolygon(int count, Polygon poly, float minX, float maxX, float minY, float maxY,
+                                         Color color, float baseRadius, int seed) {
+        java.util.Random random = new java.util.Random(seed);
+        shapeRenderer.setColor(color);
 
-        shapeRenderer.setColor(Color.YELLOW);
-        shapeRenderer.circle(x, y, dynamicRadius);
+        float dynamicRadius = baseRadius * camera.zoom;
+        if (dynamicRadius < 2.0f) dynamicRadius = 2.0f;
+
+//        if(baseRadius == 6.0f) dynamicRadius += 1f;
+
+        for (int j = 0; j < count; j++) {
+            float randomX = 0, randomY = 0;
+            boolean found = false;
+            int attempts = 0;
+
+            while (!found && attempts < 20) {
+                randomX = minX + random.nextFloat() * (maxX - minX);
+                randomY = minY + random.nextFloat() * (maxY - minY);
+                if (poly.contains(randomX, randomY)) found = true;
+                attempts++;
+            }
+
+            if (found) {
+                shapeRenderer.circle(randomX, randomY, dynamicRadius);
+            }
+        }
     }
 
     private void drawMines() {
@@ -368,7 +373,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             camera.translate(0, moveFor, 0);
         }
 
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.01f, 2f); // zoom edit
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.05f, 2f); // zoom edit
 
         float effectiveViewportWidth = camera.viewportWidth * camera.zoom;
         float effectiveViewportHeight = camera.viewportHeight * camera.zoom;
