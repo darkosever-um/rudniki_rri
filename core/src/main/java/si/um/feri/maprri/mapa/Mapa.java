@@ -20,6 +20,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Polygon;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Logger;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.ShortArray;
 
@@ -34,6 +35,7 @@ import si.um.feri.maprri.mapa.utils.ZoomXY;
 import si.um.feri.maprri.models.Borders;
 import si.um.feri.maprri.models.Mine;
 import si.um.feri.maprri.util.NetworkCallback;
+import com.badlogic.gdx.math.EarClippingTriangulator;
 
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
 
@@ -56,6 +58,10 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
     // test marker
     private final Geolocation MARKER_GEOLOCATION = new Geolocation(46.559070, 15.638100);
+
+    private final EarClippingTriangulator triangulator = new EarClippingTriangulator();
+
+    private Mine selectedMine = null;
 
     @Override
     public void create() {
@@ -154,7 +160,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         drawMines();
 
-        // ture da se izrišejo delavci pa ture da se izrisrejo infrastrukture
         drawMineEntities(true, true);
 
     }
@@ -242,8 +247,10 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         if (myMines == null || myMines.isEmpty()) return;
 
         shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(Color.BLUE);
+
+        // Omogočimo prosojnost za polnilo
+        Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA, com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
@@ -251,32 +258,53 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             for (Borders border : mine.geometry) {
                 if (border.coordinates == null) continue;
 
-                // Vsi poligoni
                 for (int i = 0; i < border.coordinates.length; i++) {
                     float[][][] polygon = border.coordinates[i];
+                    if (polygon.length == 0) continue;
 
-                    // Skozi vse točke
-                    for (int j = 0; j < polygon.length; j++) {
-                        float[][] ring = polygon[j];
-
-                        if (ring.length < 2) continue;
-
-                        for (int k = 0; k < ring.length - 1; k++) {
-                            float lon1 = ring[k][0];
-                            float lat1 = ring[k][1];
-                            float lon2 = ring[k+1][0];
-                            float lat2 = ring[k+1][1];
-
-                            Vector2 p1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y);
-                            Vector2 p2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y);
-
-                            shapeRenderer.line(p1.x, p1.y, p2.x, p2.y);
-                        }
+                    // popravek točk
+                    float[][] outerRing = polygon[0];
+                    float[] vertices = new float[outerRing.length * 2];
+                    for (int k = 0; k < outerRing.length; k++) {
+                        Vector2 p = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y);
+                        vertices[k * 2] = p.x;
+                        vertices[k * 2 + 1] = p.y;
                     }
+
+                    // fill
+                    shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+                    shapeRenderer.setColor(new Color(0.2f, 0.5f, 1f, 0.3f));
+
+                    try {
+                        ShortArray triangleIndices = triangulator.computeTriangles(vertices);
+                        for (int j = 0; j < triangleIndices.size; j += 3) {
+                            int v1 = triangleIndices.get(j) * 2;
+                            int v2 = triangleIndices.get(j + 1) * 2;
+                            int v3 = triangleIndices.get(j + 2) * 2;
+                            shapeRenderer.triangle(
+                                vertices[v1], vertices[v1 + 1],
+                                vertices[v2], vertices[v2 + 1],
+                                vertices[v3], vertices[v3 + 1]
+                            );
+                        }
+                    } catch (Exception e) {
+                        // ko nemre zrisati
+                    }
+                    shapeRenderer.end();
+
+                    // 3. RISANJE ROBA (Temno modra, da so črte povezane)
+                    shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+                    shapeRenderer.setColor(Color.BLUE);
+                    for (int k = 0; k < vertices.length - 2; k += 2) {
+                        shapeRenderer.line(vertices[k], vertices[k+1], vertices[k+2], vertices[k+3]);
+                    }
+                    // Povežemo zadnjo točko s prvo, če nista identični
+                    shapeRenderer.line(vertices[vertices.length-2], vertices[vertices.length-1], vertices[0], vertices[1]);
+                    shapeRenderer.end();
                 }
             }
         }
-        shapeRenderer.end();
+        Gdx.gl.glDisable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
     }
 
     private class DisplayMine {
