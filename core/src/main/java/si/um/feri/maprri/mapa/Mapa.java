@@ -103,6 +103,19 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         server = new ServerController("http://127.0.0.1:8080");
         myMines = new ArrayList<>();
 
+        loadLocalMines();
+
+        myMines = Mine.loadMineList();
+        if (myMines == null) {
+            myMines = new ArrayList<>();
+        }
+
+        if (localMines != null) {
+            myMines.addAll(localMines);
+            System.out.println("Local mines added: " + localMines.size());
+        }
+
+
         List<Mine> finalMyMines = myMines;
         server.getAllMines(new NetworkCallback<List<Mine>>() {
             @Override
@@ -131,6 +144,11 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 Gdx.app.postRunnable(() -> {
                     myMines.clear();
                     myMines.addAll(result);
+
+                    if (localMines != null) {
+                        myMines.addAll(localMines);
+                    }
+
                     Mine.saveMineListToFile(result);
                     System.out.println("Mines loaded: " + myMines.size());
                 });
@@ -591,6 +609,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         com.badlogic.gdx.scenes.scene2d.ui.TextButton btnSave = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("SHRANI", skin);
         com.badlogic.gdx.scenes.scene2d.ui.TextButton btnCancel = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("ZAPRI", skin);
 
+        com.badlogic.gdx.scenes.scene2d.ui.TextButton btnDelete = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("IZBRISI", skin);
+        btnDelete.setColor(Color.RED);
+
         btnSave.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
             @Override
             public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
@@ -615,8 +636,29 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             }
         });
 
+        btnDelete.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                // 1. Odstrani iz prikaza
+                myMines.remove(mine);
+
+                // 2. Odstrani iz lokalnega shranjevanja
+                // (remove deluje, če je objekt "mine" ista instanca kot tista v listi)
+                localMines.remove(mine);
+
+                // 3. Shrani novo stanje v JSON
+                saveLocalMines();
+
+                Gdx.app.log("UI", "Rudnik izbrisan: " + mine.getName());
+
+                editWindow.remove();
+                selectedMine = null;
+            }
+        });
+
         buttonTable.add(btnSave).width(130).height(45).padRight(10);
-        buttonTable.add(btnCancel).width(130).height(45);
+        buttonTable.add(btnCancel).width(130).height(45).row();
+        buttonTable.add(btnDelete).width(280).height(45).colspan(2).padTop(10);
 
         editWindow.add(buttonTable).left().row();
 
