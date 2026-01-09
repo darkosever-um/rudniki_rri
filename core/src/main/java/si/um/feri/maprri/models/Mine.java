@@ -226,4 +226,51 @@ public class Mine implements Json.Serializable {
     public List<Infrastructure> getInfrastructures() {
         return infrastructure;
     }
+
+    public void setName(String text) {
+        name = text;
+    }
+
+    public void setId(String string) {
+        id = string;
+    }
+
+    public void setWorkers(List<Worker> workers) {
+        this.workers = workers;
+    }
+
+    public void setInfrastructures(List<Infrastructure> infrastructure) {
+        this.infrastructure = infrastructure;
+    }
+
+    public String getMunicipality() {
+        return municipality;
+    }
+
+    public Integer getEndYear() {
+        return endYear;
+    }
+
+    public Integer getStartYear() {
+        return startYear;
+    }
+
+    public MineType getType() {
+        return type;
+    }
+
+    public MineStatus getStatus() {
+        return status;
+    }
+
+    public void setStartYear(int i) {
+        startYear = i;
+    }
+    public void setEndYear(int i) {
+        endYear = i;
+    }
+
+    public void setMunicipality(String text) {
+        municipality = text;
+    }
 }
