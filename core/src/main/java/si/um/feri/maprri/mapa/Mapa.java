@@ -335,6 +335,34 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
     @Override
     public boolean tap(float x, float y, int count, int button) {
+        touchPosition.set(x, y, 0);
+        camera.unproject(touchPosition);
+
+        selectedMine = null;
+
+        for (Mine mine : myMines) {
+            if (mine.geometry == null) continue;
+
+            for (Borders border : mine.geometry) {
+                if (border.coordinates == null) continue;
+
+                // Preverimo zunanji obroč (polygon[0])
+                float[][] outerRing = border.coordinates[0][0];
+                float[] vertices = new float[outerRing.length * 2];
+                for (int k = 0; k < outerRing.length; k++) {
+                    Vector2 p = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y);
+                    vertices[k * 2] = p.x;
+                    vertices[k * 2 + 1] = p.y;
+                }
+
+                Polygon poly = new Polygon(vertices);
+                if (poly.contains(touchPosition.x, touchPosition.y)) {
+                    selectedMine = mine;
+                    Gdx.app.log("MAPA", "Kliknil si na rudnik: " + mine.getName());
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
