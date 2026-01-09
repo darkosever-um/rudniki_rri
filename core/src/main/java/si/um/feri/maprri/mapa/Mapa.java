@@ -79,6 +79,16 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     // za tipko spreminjati
     private TextButton btnAdd;
 
+    // za inpute
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField workersField;
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField infraField;
+
+    private com.badlogic.gdx.scenes.scene2d.ui.SelectBox<si.um.feri.maprri.models.enums.MineStatus> statusSelect;
+    private com.badlogic.gdx.scenes.scene2d.ui.SelectBox<si.um.feri.maprri.models.enums.MineType> typeSelect;
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField municipalityField;
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField startYearField;
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField endYearField;
+
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
@@ -587,28 +597,84 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private void showEditPanel(final Mine mine, final boolean isNew) {
         if (editWindow != null) editWindow.remove();
 
+        com.badlogic.gdx.scenes.scene2d.ui.TextField.TextFieldFilter digitsFilter = new com.badlogic.gdx.scenes.scene2d.ui.TextField.TextFieldFilter() {
+            @Override
+            public boolean acceptChar(com.badlogic.gdx.scenes.scene2d.ui.TextField textField, char c) {
+                return Character.isDigit(c);
+            }
+        };
+
         editWindow = new com.badlogic.gdx.scenes.scene2d.ui.Window("", skin);
 
         editWindow.setSize(320, stage.getHeight());
-
         editWindow.setPosition(0, 0);
         editWindow.setMovable(false);
 
-        editWindow.top().left().padTop(60).padLeft(20);
+        editWindow.top().left().padTop(30).padLeft(15).padRight(15);
+
+        editWindow.defaults().left().width(290).padBottom(5);
 
         com.badlogic.gdx.scenes.scene2d.ui.Label titleLabel = new com.badlogic.gdx.scenes.scene2d.ui.Label(isNew ? "NOV RUDNIK" : "UREDI RUDNIK", skin);
         titleLabel.setFontScale(1.2f);
-        editWindow.add(titleLabel).padBottom(20).left().row();
+        editWindow.add(titleLabel).padBottom(15).row();
 
-        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Ime rudnika:", skin)).left().padBottom(5).row();
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Ime rudnika:", skin)).row();
         nameField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(mine.getName() != null ? mine.getName() : "", skin);
-        editWindow.add(nameField).width(280).padBottom(20).row();
+        editWindow.add(nameField).padBottom(10).row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Obcina:", skin)).row();
+        String muniVal = "";
+
+         muniVal = mine.getMunicipality() != null ? mine.getMunicipality() : "";
+        municipalityField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(muniVal, skin);
+        editWindow.add(municipalityField).padBottom(10).row();
+
+        com.badlogic.gdx.scenes.scene2d.ui.Table yearsTable = new com.badlogic.gdx.scenes.scene2d.ui.Table();
+        yearsTable.left();
+
+        yearsTable.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Zacetek:", skin)).padRight(5);
+        String startY = mine.getStartYear() != null ? String.valueOf(mine.getStartYear()) : "";
+        startYearField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(startY, skin);
+        startYearField.setTextFieldFilter(digitsFilter);
+        yearsTable.add(startYearField).width(80).padRight(15);
+
+        yearsTable.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Konec:", skin)).padRight(5);
+        String endY = mine.getEndYear() != null ? String.valueOf(mine.getEndYear()) : "";
+        endYearField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(endY, skin);
+        endYearField.setTextFieldFilter(digitsFilter);
+        yearsTable.add(endYearField).width(80);
+
+        editWindow.add(yearsTable).padBottom(10).row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Tip rudnika:", skin)).row();
+        typeSelect = new com.badlogic.gdx.scenes.scene2d.ui.SelectBox<>(skin);
+        typeSelect.setItems(si.um.feri.maprri.models.enums.MineType.values());
+
+        typeSelect.setSelected(mine.getType());
+        editWindow.add(typeSelect).padBottom(10).row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Status:", skin)).row();
+        statusSelect = new com.badlogic.gdx.scenes.scene2d.ui.SelectBox<>(skin);
+        statusSelect.setItems(si.um.feri.maprri.models.enums.MineStatus.values());
+        statusSelect.setSelected(mine.getStatus());
+        editWindow.add(statusSelect).padBottom(10).row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Stevilo delavcev:", skin)).row();
+        int workerCount = (mine.getWorkers() != null) ? mine.getWorkers().size() : 0;
+        workersField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(String.valueOf(workerCount), skin);
+        workersField.setTextFieldFilter(digitsFilter);
+        editWindow.add(workersField).padBottom(10).row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Stevilo infrastrukture:", skin)).row();
+        int infraCount = (mine.getInfrastructures() != null) ? mine.getInfrastructures().size() : 0;
+        infraField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(String.valueOf(infraCount), skin);
+        infraField.setTextFieldFilter(digitsFilter);
+        editWindow.add(infraField).padBottom(20).row();
 
         com.badlogic.gdx.scenes.scene2d.ui.Table buttonTable = new com.badlogic.gdx.scenes.scene2d.ui.Table();
 
         com.badlogic.gdx.scenes.scene2d.ui.TextButton btnSave = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("SHRANI", skin);
         com.badlogic.gdx.scenes.scene2d.ui.TextButton btnCancel = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("ZAPRI", skin);
-
         com.badlogic.gdx.scenes.scene2d.ui.TextButton btnDelete = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("IZBRISI", skin);
         btnDelete.setColor(Color.RED);
 
@@ -617,11 +683,33 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
                 mine.setName(nameField.getText());
 
+                mine.setMunicipality(municipalityField.getText());
+
+                try {
+                    if (!startYearField.getText().isEmpty())
+                         mine.setStartYear(Integer.parseInt(startYearField.getText()));
+                    if (!endYearField.getText().isEmpty())
+                         mine.setEndYear(Integer.parseInt(endYearField.getText()));
+                } catch (NumberFormatException ignored) {}
+
+                int newWorkerCount = 0;
+                try {
+                    String txt = workersField.getText();
+                    if (!txt.isEmpty()) newWorkerCount = Integer.parseInt(txt);
+                } catch (NumberFormatException ignored) {}
+                updateWorkerList(mine, newWorkerCount);
+
+                int newInfraCount = 0;
+                try {
+                    String txt = infraField.getText();
+                    if (!txt.isEmpty()) newInfraCount = Integer.parseInt(txt);
+                } catch (NumberFormatException ignored) {}
+                updateInfrastructureList(mine, newInfraCount);
+
                 if (isNew) {
                     localMines.add(mine);
                     myMines.add(mine);
                 }
-
                 saveLocalMines();
                 editWindow.remove();
                 selectedMine = null;
@@ -639,31 +727,71 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         btnDelete.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
             @Override
             public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
-                // 1. Odstrani iz prikaza
                 myMines.remove(mine);
-
-                // 2. Odstrani iz lokalnega shranjevanja
-                // (remove deluje, če je objekt "mine" ista instanca kot tista v listi)
                 localMines.remove(mine);
-
-                // 3. Shrani novo stanje v JSON
                 saveLocalMines();
-
-                Gdx.app.log("UI", "Rudnik izbrisan: " + mine.getName());
-
                 editWindow.remove();
                 selectedMine = null;
             }
         });
 
-        buttonTable.add(btnSave).width(130).height(45).padRight(10);
-        buttonTable.add(btnCancel).width(130).height(45).row();
+        buttonTable.add(btnSave).width(135).height(45).padRight(10);
+        buttonTable.add(btnCancel).width(135).height(45).row();
         buttonTable.add(btnDelete).width(280).height(45).colspan(2).padTop(10);
 
-        editWindow.add(buttonTable).left().row();
+        editWindow.add(buttonTable).row();
 
         stage.addActor(editWindow);
         stage.setKeyboardFocus(nameField);
+    }
+
+    private void updateWorkerList(Mine mine, int targetCount) {
+        List<si.um.feri.maprri.models.Worker> list = mine.getWorkers();
+        if (list == null) list = new ArrayList<>();
+
+        while (list.size() < targetCount) {
+            si.um.feri.maprri.models.Worker w = new si.um.feri.maprri.models.Worker();
+            w.firstName = "Worker";
+            w.lastName = "#" + (list.size() + 1);
+            w.idNumber = 1000 + list.size();
+            w.salary = 1200.0 + MathUtils.random(500);
+            w.type = 1;
+            w.birthDate = System.currentTimeMillis();
+            list.add(w);
+        }
+
+        while (list.size() > targetCount) {
+            list.remove(list.size() - 1);
+        }
+
+        mine.setWorkers(list);
+    }
+
+    private void updateInfrastructureList(Mine mine, int targetCount) {
+        List<si.um.feri.maprri.models.Infrastructure> list = mine.getInfrastructures();
+        if (list == null) list = new ArrayList<>();
+
+        si.um.feri.maprri.models.enums.InfrastructureStatus defaultStatus =
+            si.um.feri.maprri.models.enums.InfrastructureStatus.values()[0];
+
+        while (list.size() < targetCount) {
+            si.um.feri.maprri.models.Infrastructure infra = new si.um.feri.maprri.models.Infrastructure(
+                "Generic Brand",
+                "Model-" + (list.size() + 1),
+                5000 + list.size(),
+                defaultStatus,
+                System.currentTimeMillis(),
+                0f,
+                0
+            );
+            list.add(infra);
+        }
+
+        while (list.size() > targetCount) {
+            list.remove(list.size() - 1);
+        }
+
+        mine.setInfrastructures(list);
     }
 
     private Geolocation unprojectMapCoordinates(float x, float y) {
