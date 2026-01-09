@@ -1,5 +1,10 @@
 package si.um.feri.maprri.mapa;
 
+import static si.um.feri.maprri.mapa.utils.GeoUtils.unprojectMapCoordinates;
+import static si.um.feri.maprri.mapa.utils.MineFactory.createMineFromGeoPoints;
+import static si.um.feri.maprri.mapa.utils.MineFactory.updateInfrastructureList;
+import static si.um.feri.maprri.mapa.utils.MineFactory.updateWorkerList;
+
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -470,7 +475,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         if (isDrawing) {
             drawnPoints.add(new Vector2(touchPosition.x, touchPosition.y));
 
-            Geolocation geo = unprojectMapCoordinates(touchPosition.x, touchPosition.y);
+            Geolocation geo = unprojectMapCoordinates(touchPosition.x, touchPosition.y, beginTile);
             drawnGeoPoints.add(new double[]{geo.lat, geo.lng});
 
             Gdx.app.log("RISANJE", "Dodana točka: " + geo.lat + ", " + geo.lng);
@@ -760,123 +765,5 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         stage.addActor(editWindow);
         stage.setKeyboardFocus(nameField);
-    }
-
-    private void updateWorkerList(Mine mine, int targetCount) {
-        List<si.um.feri.maprri.models.Worker> list = mine.getWorkers();
-        if (list == null) list = new ArrayList<>();
-
-        while (list.size() < targetCount) {
-            si.um.feri.maprri.models.Worker w = new si.um.feri.maprri.models.Worker();
-            w.firstName = "Worker";
-            w.lastName = "#" + (list.size() + 1);
-            w.idNumber = 1000 + list.size();
-            w.salary = 1200.0 + MathUtils.random(500);
-            w.type = 1;
-            w.birthDate = System.currentTimeMillis();
-            list.add(w);
-        }
-
-        while (list.size() > targetCount) {
-            list.remove(list.size() - 1);
-        }
-
-        mine.setWorkers(list);
-    }
-
-    private void updateInfrastructureList(Mine mine, int targetCount) {
-        List<si.um.feri.maprri.models.Infrastructure> list = mine.getInfrastructures();
-        if (list == null) list = new ArrayList<>();
-
-        si.um.feri.maprri.models.enums.InfrastructureStatus defaultStatus =
-            si.um.feri.maprri.models.enums.InfrastructureStatus.values()[0];
-
-        while (list.size() < targetCount) {
-            si.um.feri.maprri.models.Infrastructure infra = new si.um.feri.maprri.models.Infrastructure(
-                "Generic Brand",
-                "Model-" + (list.size() + 1),
-                5000 + list.size(),
-                defaultStatus,
-                System.currentTimeMillis(),
-                0f,
-                0
-            );
-            list.add(infra);
-        }
-
-        while (list.size() > targetCount) {
-            list.remove(list.size() - 1);
-        }
-
-        mine.setInfrastructures(list);
-    }
-
-    private Geolocation unprojectMapCoordinates(float x, float y) {
-        double mapSize = MapRasterTiles.TILE_SIZE * Math.pow(2, Constants.ZOOM);
-        double globalPixelX = (beginTile.x * MapRasterTiles.TILE_SIZE) + x;
-        double globalPixelY = (beginTile.y * MapRasterTiles.TILE_SIZE) + (Constants.NUM_TILES * MapRasterTiles.TILE_SIZE) - y;
-
-        double n = Math.PI - 2.0 * Math.PI * globalPixelY / mapSize;
-
-        double lng = (globalPixelX / mapSize * 360.0) - 180.0;
-        double lat = 180.0 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-
-        return new Geolocation(lat, lng);
-    }
-
-    private Mine createMineFromGeoPoints(List<double[]> geoPoints) {
-        Mine mine = new Mine();
-        mine.setName("Nov Rudnik");
-        mine.setId(java.util.UUID.randomUUID().toString());
-
-        int size = geoPoints.size();
-        boolean needsClosing = true;
-
-        float[][][] coordinates = new float[1][size + 1][2];
-
-        for (int i = 0; i < size; i++) {
-            coordinates[0][i][0] = (float) geoPoints.get(i)[1];
-            coordinates[0][i][1] = (float) geoPoints.get(i)[0];
-        }
-
-        coordinates[0][size][0] = (float) geoPoints.get(0)[1];
-        coordinates[0][size][1] = (float) geoPoints.get(0)[0];
-
-        Borders border = new Borders();
-
-        float[][][][] multiPolygon = new float[1][][][];
-        multiPolygon[0] = coordinates;
-
-        border.coordinates = multiPolygon;
-
-        ArrayList<Borders> geometry = new ArrayList<>();
-        geometry.add(border);
-        mine.geometry = geometry;
-
-        return mine;
-    }
-
-    private Vector2 getMineCenter(Mine mine) {
-        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
-        float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-        boolean found = false;
-
-        for (Borders border : mine.geometry) {
-            if (border.coordinates == null) continue;
-            if (border.coordinates.length > 0 && border.coordinates[0].length > 0) {
-                float[][] ring = border.coordinates[0][0];
-                for (int k = 0; k < ring.length; k++) {
-                    Vector2 p = MapRasterTiles.getPixelPosition(ring[k][1], ring[k][0], beginTile.x, beginTile.y);
-                    if (p.x < minX) minX = p.x;
-                    if (p.x > maxX) maxX = p.x;
-                    if (p.y < minY) minY = p.y;
-                    if (p.y > maxY) maxY = p.y;
-                    found = true;
-                }
-            }
-        }
-
-        if (!found) return null;
-        return new Vector2((minX + maxX) / 2f, (minY + maxY) / 2f);
     }
 }
