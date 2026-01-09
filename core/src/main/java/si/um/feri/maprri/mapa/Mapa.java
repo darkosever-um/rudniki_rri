@@ -178,7 +178,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             @Override
             public boolean scrolled(float amountX, float amountY) {
                 camera.zoom += amountY * 0.1f;
-                camera.zoom = MathUtils.clamp(camera.zoom, 0.1f, 3.0f);
+                camera.zoom = MathUtils.clamp(camera.zoom, 0.005f, 2.0f);
 
                 return true;
             }
@@ -345,8 +345,22 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         java.util.Random random = new java.util.Random(seed);
         shapeRenderer.setColor(color);
 
-        float dynamicRadius = baseRadius * camera.zoom;
-        if (dynamicRadius < 2.0f) dynamicRadius = 2.0f;
+        float polyWidth = maxX - minX;
+        float polyHeight = maxY - minY;
+
+        float minDimension = Math.min(polyWidth, polyHeight);
+
+        float zoomBasedRadius = baseRadius * camera.zoom;
+
+        float maxAllowedRadius = minDimension / 5.0f;
+
+        float finalRadius = Math.min(zoomBasedRadius, maxAllowedRadius);
+
+        if (finalRadius < 0.5f) finalRadius = 0.5f;
+
+        if (finalRadius > minDimension / 2.0f) finalRadius = minDimension / 2.0f;
+
+        int segments = Math.max(6, (int)(8 + finalRadius));
 
         for (int j = 0; j < count; j++) {
             float randomX = 0, randomY = 0;
@@ -356,12 +370,15 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             while (!found && attempts < 20) {
                 randomX = minX + random.nextFloat() * (maxX - minX);
                 randomY = minY + random.nextFloat() * (maxY - minY);
-                if (poly.contains(randomX, randomY)) found = true;
+
+                if (poly.contains(randomX, randomY)) {
+                    found = true;
+                }
                 attempts++;
             }
 
             if (found) {
-                shapeRenderer.circle(randomX, randomY, dynamicRadius);
+                shapeRenderer.circle(randomX, randomY, finalRadius, segments);
             }
         }
     }
@@ -523,13 +540,13 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
     private void handleInput() {
 
-        float moveFor = 12f; // 3f
+        float moveFor = 1.5f;
 
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            camera.zoom += 0.02;
+            camera.zoom += 0.004;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.Q)) {
-            camera.zoom -= 0.02;
+            camera.zoom -= 0.004;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
             camera.translate(-moveFor, 0, 0);
@@ -544,7 +561,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             camera.translate(0, moveFor, 0);
         }
 
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.05f, 2f); // zoom edit
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.005f, 2f);
 
         float effectiveViewportWidth = camera.viewportWidth * camera.zoom;
         float effectiveViewportHeight = camera.viewportHeight * camera.zoom;
@@ -837,5 +854,29 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         mine.geometry = geometry;
 
         return mine;
+    }
+
+    private Vector2 getMineCenter(Mine mine) {
+        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
+        float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+        boolean found = false;
+
+        for (Borders border : mine.geometry) {
+            if (border.coordinates == null) continue;
+            if (border.coordinates.length > 0 && border.coordinates[0].length > 0) {
+                float[][] ring = border.coordinates[0][0];
+                for (int k = 0; k < ring.length; k++) {
+                    Vector2 p = MapRasterTiles.getPixelPosition(ring[k][1], ring[k][0], beginTile.x, beginTile.y);
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                    found = true;
+                }
+            }
+        }
+
+        if (!found) return null;
+        return new Vector2((minX + maxX) / 2f, (minY + maxY) / 2f);
     }
 }
