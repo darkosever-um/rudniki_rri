@@ -20,7 +20,10 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Polygon;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
-import com.badlogic.gdx.utils.Logger;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.ShortArray;
 
@@ -35,7 +38,9 @@ import si.um.feri.maprri.mapa.utils.ZoomXY;
 import si.um.feri.maprri.models.Borders;
 import si.um.feri.maprri.models.Mine;
 import si.um.feri.maprri.util.NetworkCallback;
+
 import com.badlogic.gdx.math.EarClippingTriangulator;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
 
@@ -46,22 +51,33 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private TiledMapRenderer tiledMapRenderer;
     private OrthographicCamera camera;
 
-    private Texture[] mapTiles;
-    private ZoomXY beginTile;   // top left tile
+    private ZoomXY beginTile;
 
     private ServerController server;
 
     private List<Mine> myMines;
-
-    // center geolocation
-    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.1199, 14.8153);
-
-    // test marker
-    private final Geolocation MARKER_GEOLOCATION = new Geolocation(46.559070, 15.638100);
+    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.1199, 14.8153); // center
 
     private final EarClippingTriangulator triangulator = new EarClippingTriangulator();
 
     private Mine selectedMine = null;
+
+    private Stage stage;
+    private Skin skin;
+
+    private List<Mine> localMines = new ArrayList<>();
+    private com.badlogic.gdx.utils.Json json = new com.badlogic.gdx.utils.Json();
+
+    private com.badlogic.gdx.scenes.scene2d.ui.Window editWindow;
+    private com.badlogic.gdx.scenes.scene2d.ui.TextField nameField;
+
+    // stanje za risanje
+    private boolean isDrawing = false;
+    private List<Vector2> drawnPoints = new ArrayList<>(); // Točke v pikslih za izrisovanje črt med risanjem
+    private List<double[]> drawnGeoPoints = new ArrayList<>(); // Točke v lat/lon za shranjevanje v Mine
+
+    // za tipko spreminjati
+    private TextButton btnAdd;
 
     @Override
     public void create() {
@@ -126,7 +142,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             }
         });
 
-
         InputMultiplexer multiplexer = new InputMultiplexer();
 
         multiplexer.addProcessor(new GestureDetector(this));
@@ -135,7 +150,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             @Override
             public boolean scrolled(float amountX, float amountY) {
                 camera.zoom += amountY * 0.1f;
-
                 camera.zoom = MathUtils.clamp(camera.zoom, 0.1f, 3.0f);
 
                 return true;
@@ -145,10 +159,64 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         Gdx.input.setInputProcessor(multiplexer);
 
         loadTilesAsync(layer);
+
+        skin = new Skin(Gdx.files.internal("metal-ui.json"));
+        stage = new Stage(new ScreenViewport());
+
+        Table uiTable = new Table();
+        uiTable.setFillParent(true);
+        uiTable.bottom().right().pad(20);
+
+        btnAdd = new TextButton("Dodaj Rudnik", skin);
+        btnAdd.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                if (!isDrawing) {
+                    // ZAČETEK RISANJA
+                    isDrawing = true;
+                    drawnPoints.clear();
+                    drawnGeoPoints.clear();
+                    btnAdd.setText("ZAKLJUCI");
+                    Gdx.app.log("UI", "Način risanja vklopljen.");
+
+                    if (editWindow != null) editWindow.remove();
+                    selectedMine = null;
+
+                } else {
+                    // KONEC RISANJA
+                    if (drawnGeoPoints.size() < 3) {
+                        Gdx.app.log("UI", "Premalo točk! Vsaj 3.");
+                        return;
+                    }
+
+                    Mine newMine = createMineFromGeoPoints(drawnGeoPoints);
+
+                    // Resetiramo stanje
+                    isDrawing = false;
+                    btnAdd.setText("Dodaj Rudnik");
+                    drawnPoints.clear();
+
+                    // Odpremo urejanje
+                    selectedMine = newMine;
+                    showEditPanel(newMine, true);
+                }
+            }
+        });
+
+        uiTable.add(btnAdd).width(150).height(50);
+        stage.addActor(uiTable);
+
+        multiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
+        if (multiplexer == null) {
+            multiplexer = new InputMultiplexer();
+            Gdx.input.setInputProcessor(multiplexer);
+        }
+        multiplexer.addProcessor(0, stage);
     }
 
     @Override
     public void render() {
+        super.render();
         ScreenUtils.clear(0, 0, 0, 1);
 
         handleInput();
@@ -159,9 +227,38 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer.render();
 
         drawMines();
-
         drawMineEntities(true, true);
 
+        // risanje
+        if (isDrawing && !drawnPoints.isEmpty()) {
+            shapeRenderer.setProjectionMatrix(camera.combined);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+            shapeRenderer.setColor(Color.RED);
+
+            for (int i = 0; i < drawnPoints.size() - 1; i++) {
+                Vector2 p1 = drawnPoints.get(i);
+                Vector2 p2 = drawnPoints.get(i + 1);
+                shapeRenderer.line(p1.x, p1.y, p2.x, p2.y);
+            }
+
+            if (drawnPoints.size() > 2) {
+                Vector2 first = drawnPoints.get(0);
+                Vector2 last = drawnPoints.get(drawnPoints.size() - 1);
+                shapeRenderer.setColor(Color.ORANGE); // Oranžna za "zapiralno" črto
+                shapeRenderer.line(last.x, last.y, first.x, first.y);
+            }
+            shapeRenderer.end();
+
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            shapeRenderer.setColor(Color.RED);
+            for (Vector2 point : drawnPoints) {
+                shapeRenderer.circle(point.x, point.y, 5 * camera.zoom);
+            }
+            shapeRenderer.end();
+        }
+
+        stage.act(Gdx.graphics.getDeltaTime());
+        stage.draw();
     }
 
     private void drawMineEntities(boolean showWorkers, boolean showInfra) {
@@ -223,8 +320,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         float dynamicRadius = baseRadius * camera.zoom;
         if (dynamicRadius < 2.0f) dynamicRadius = 2.0f;
 
-//        if(baseRadius == 6.0f) dynamicRadius += 1f;
-
         for (int j = 0; j < count; j++) {
             float randomX = 0, randomY = 0;
             boolean found = false;
@@ -247,78 +342,67 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         if (myMines == null || myMines.isEmpty()) return;
 
         shapeRenderer.setProjectionMatrix(camera.combined);
-
-        // Omogočimo prosojnost za polnilo
         Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA, com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
+        // naredimo vse fille
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
-
             for (Borders border : mine.geometry) {
                 if (border.coordinates == null) continue;
-
-                for (int i = 0; i < border.coordinates.length; i++) {
-                    float[][][] polygon = border.coordinates[i];
+                for (float[][][] polygon : border.coordinates) {
                     if (polygon.length == 0) continue;
+                    float[] vertices = getVertices(polygon[0]);
 
-                    // popravek točk
-                    float[][] outerRing = polygon[0];
-                    float[] vertices = new float[outerRing.length * 2];
-                    for (int k = 0; k < outerRing.length; k++) {
-                        Vector2 p = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y);
-                        vertices[k * 2] = p.x;
-                        vertices[k * 2 + 1] = p.y;
-                    }
-
-                    // fill
-                    shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-                    shapeRenderer.setColor(new Color(0.2f, 0.5f, 1f, 0.3f));
+                    // za izbroni rudnik damo drugo barvo
+                    if (mine == selectedMine) shapeRenderer.setColor(new Color(1f, 1f, 0f, 0.4f)); // Rumena
+                    else shapeRenderer.setColor(new Color(0.2f, 0.5f, 1f, 0.3f)); // Modra
 
                     try {
-                        ShortArray triangleIndices = triangulator.computeTriangles(vertices);
-                        for (int j = 0; j < triangleIndices.size; j += 3) {
-                            int v1 = triangleIndices.get(j) * 2;
-                            int v2 = triangleIndices.get(j + 1) * 2;
-                            int v3 = triangleIndices.get(j + 2) * 2;
+                        ShortArray indices = triangulator.computeTriangles(vertices);
+                        for (int j = 0; j < indices.size; j += 3) {
                             shapeRenderer.triangle(
-                                vertices[v1], vertices[v1 + 1],
-                                vertices[v2], vertices[v2 + 1],
-                                vertices[v3], vertices[v3 + 1]
+                                vertices[indices.get(j)*2], vertices[indices.get(j)*2+1],
+                                vertices[indices.get(j+1)*2], vertices[indices.get(j+1)*2+1],
+                                vertices[indices.get(j+2)*2], vertices[indices.get(j+2)*2+1]
                             );
                         }
-                    } catch (Exception e) {
-                        // ko nemre zrisati
-                    }
-                    shapeRenderer.end();
-
-                    // 3. RISANJE ROBA (Temno modra, da so črte povezane)
-                    shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-                    shapeRenderer.setColor(Color.BLUE);
-                    for (int k = 0; k < vertices.length - 2; k += 2) {
-                        shapeRenderer.line(vertices[k], vertices[k+1], vertices[k+2], vertices[k+3]);
-                    }
-                    // Povežemo zadnjo točko s prvo, če nista identični
-                    shapeRenderer.line(vertices[vertices.length-2], vertices[vertices.length-1], vertices[0], vertices[1]);
-                    shapeRenderer.end();
+                    } catch (Exception ignored) {}
                 }
             }
         }
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        for (Mine mine : myMines) {
+            if (mine.geometry == null) continue;
+
+            if (mine == selectedMine) shapeRenderer.setColor(Color.YELLOW);
+            else shapeRenderer.setColor(Color.BLUE);
+
+            for (Borders border : mine.geometry) {
+                for (float[][][] polygon : border.coordinates) {
+                    float[] vertices = getVertices(polygon[0]);
+                    for (int k = 0; k < vertices.length - 2; k += 2) {
+                        shapeRenderer.line(vertices[k], vertices[k+1], vertices[k+2], vertices[k+3]);
+                    }
+                    shapeRenderer.line(vertices[vertices.length-2], vertices[vertices.length-1], vertices[0], vertices[1]);
+                }
+            }
+        }
+        shapeRenderer.end();
         Gdx.gl.glDisable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
     }
 
-    private class DisplayMine {
-        Mine originalData;
-        List<Polygon> hitboxes;
-        List<float[]> triangulatedVertices;
-        List<ShortArray> triangleIndices;
-
-        public DisplayMine(Mine mine) {
-            this.originalData = mine;
-            this.hitboxes = new ArrayList<>();
-            this.triangulatedVertices = new ArrayList<>();
-            this.triangleIndices = new ArrayList<>();
+    private float[] getVertices(float[][] ring) {
+        float[] vertices = new float[ring.length * 2];
+        for (int k = 0; k < ring.length; k++) {
+            Vector2 p = MapRasterTiles.getPixelPosition(ring[k][1], ring[k][0], beginTile.x, beginTile.y);
+            vertices[k * 2] = p.x;
+            vertices[k * 2 + 1] = p.y;
         }
+        return vertices;
     }
 
     @Override
@@ -338,28 +422,31 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         touchPosition.set(x, y, 0);
         camera.unproject(touchPosition);
 
+        if (isDrawing) {
+            drawnPoints.add(new Vector2(touchPosition.x, touchPosition.y));
+
+            Geolocation geo = unprojectMapCoordinates(touchPosition.x, touchPosition.y);
+            drawnGeoPoints.add(new double[]{geo.lat, geo.lng});
+
+            Gdx.app.log("RISANJE", "Dodana točka: " + geo.lat + ", " + geo.lng);
+            return true;
+        }
+
+        if(selectedMine != null) editWindow.remove();
         selectedMine = null;
 
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
-
             for (Borders border : mine.geometry) {
-                if (border.coordinates == null) continue;
-
-                // Preverimo zunanji obroč (polygon[0])
-                float[][] outerRing = border.coordinates[0][0];
-                float[] vertices = new float[outerRing.length * 2];
-                for (int k = 0; k < outerRing.length; k++) {
-                    Vector2 p = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y);
-                    vertices[k * 2] = p.x;
-                    vertices[k * 2 + 1] = p.y;
-                }
-
-                Polygon poly = new Polygon(vertices);
-                if (poly.contains(touchPosition.x, touchPosition.y)) {
-                    selectedMine = mine;
-                    Gdx.app.log("MAPA", "Kliknil si na rudnik: " + mine.getName());
-                    return true;
+                for (float[][][] polygon : border.coordinates) {
+                    float[] vertices = getVertices(polygon[0]);
+                    Polygon poly = new Polygon(vertices);
+                    if (poly.contains(touchPosition.x, touchPosition.y)) {
+                        selectedMine = mine;
+                        Gdx.app.log("MAPA", "Izbran rudnik: " + mine.getName());
+                        showEditPanel(mine, false);
+                        return true;
+                    }
                 }
             }
         }
@@ -462,5 +549,123 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 });
             }
         }
+    }
+
+    private void saveLocalMines() {
+        com.badlogic.gdx.Preferences prefs = Gdx.app.getPreferences("MyMapSettings");
+        prefs.putString("local_mines", json.toJson(localMines));
+        prefs.flush();
+    }
+
+    private void loadLocalMines() {
+        com.badlogic.gdx.Preferences prefs = Gdx.app.getPreferences("MyMapSettings");
+        String data = prefs.getString("local_mines", "");
+        if (!data.isEmpty()) {
+            localMines = json.fromJson(ArrayList.class, Mine.class, data);
+        }
+    }
+
+    // panel za urejanje rudnika
+    private void showEditPanel(final Mine mine, final boolean isNew) {
+        if (editWindow != null) editWindow.remove();
+
+        editWindow = new com.badlogic.gdx.scenes.scene2d.ui.Window("", skin);
+
+        editWindow.setSize(320, stage.getHeight());
+
+        editWindow.setPosition(0, 0);
+        editWindow.setMovable(false);
+
+        editWindow.top().left().padTop(60).padLeft(20);
+
+        com.badlogic.gdx.scenes.scene2d.ui.Label titleLabel = new com.badlogic.gdx.scenes.scene2d.ui.Label(isNew ? "NOV RUDNIK" : "UREDI RUDNIK", skin);
+        titleLabel.setFontScale(1.2f);
+        editWindow.add(titleLabel).padBottom(20).left().row();
+
+        editWindow.add(new com.badlogic.gdx.scenes.scene2d.ui.Label("Ime rudnika:", skin)).left().padBottom(5).row();
+        nameField = new com.badlogic.gdx.scenes.scene2d.ui.TextField(mine.getName() != null ? mine.getName() : "", skin);
+        editWindow.add(nameField).width(280).padBottom(20).row();
+
+        com.badlogic.gdx.scenes.scene2d.ui.Table buttonTable = new com.badlogic.gdx.scenes.scene2d.ui.Table();
+
+        com.badlogic.gdx.scenes.scene2d.ui.TextButton btnSave = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("SHRANI", skin);
+        com.badlogic.gdx.scenes.scene2d.ui.TextButton btnCancel = new com.badlogic.gdx.scenes.scene2d.ui.TextButton("ZAPRI", skin);
+
+        btnSave.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                mine.setName(nameField.getText());
+
+                if (isNew) {
+                    localMines.add(mine);
+                    myMines.add(mine);
+                }
+
+                saveLocalMines();
+                editWindow.remove();
+                selectedMine = null;
+            }
+        });
+
+        btnCancel.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+            @Override
+            public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
+                editWindow.remove();
+                selectedMine = null;
+            }
+        });
+
+        buttonTable.add(btnSave).width(130).height(45).padRight(10);
+        buttonTable.add(btnCancel).width(130).height(45);
+
+        editWindow.add(buttonTable).left().row();
+
+        stage.addActor(editWindow);
+        stage.setKeyboardFocus(nameField);
+    }
+
+    private Geolocation unprojectMapCoordinates(float x, float y) {
+        double mapSize = MapRasterTiles.TILE_SIZE * Math.pow(2, Constants.ZOOM);
+        double globalPixelX = (beginTile.x * MapRasterTiles.TILE_SIZE) + x;
+        double globalPixelY = (beginTile.y * MapRasterTiles.TILE_SIZE) + (Constants.NUM_TILES * MapRasterTiles.TILE_SIZE) - y;
+
+        double n = Math.PI - 2.0 * Math.PI * globalPixelY / mapSize;
+
+        double lng = (globalPixelX / mapSize * 360.0) - 180.0;
+        double lat = 180.0 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+
+        return new Geolocation(lat, lng);
+    }
+
+    private Mine createMineFromGeoPoints(List<double[]> geoPoints) {
+        Mine mine = new Mine();
+        mine.setName("Nov Rudnik");
+        mine.setId(java.util.UUID.randomUUID().toString());
+
+        int size = geoPoints.size();
+        boolean needsClosing = true;
+
+        float[][][] coordinates = new float[1][size + 1][2];
+
+        for (int i = 0; i < size; i++) {
+            coordinates[0][i][0] = (float) geoPoints.get(i)[1];
+            coordinates[0][i][1] = (float) geoPoints.get(i)[0];
+        }
+
+        coordinates[0][size][0] = (float) geoPoints.get(0)[1];
+        coordinates[0][size][1] = (float) geoPoints.get(0)[0];
+
+        Borders border = new Borders();
+
+        float[][][][] multiPolygon = new float[1][][][];
+        multiPolygon[0] = coordinates;
+
+        border.coordinates = multiPolygon;
+
+        ArrayList<Borders> geometry = new ArrayList<>();
+        geometry.add(border);
+        mine.geometry = geometry;
+
+        return mine;
     }
 }

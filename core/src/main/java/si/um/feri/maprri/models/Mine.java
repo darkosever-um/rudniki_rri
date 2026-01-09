@@ -226,4 +226,12 @@ public class Mine implements Json.Serializable {
     public List<Infrastructure> getInfrastructures() {
         return infrastructure;
     }
+
+    public void setName(String text) {
+        name = text;
+    }
+
+    public void setId(String string) {
+        id = string;
+    }
 }
