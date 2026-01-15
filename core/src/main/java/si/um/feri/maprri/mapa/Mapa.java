@@ -47,6 +47,10 @@ import si.um.feri.maprri.util.NetworkCallback;
 import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
+import si.um.feri.maprri.models.Industry;
+import si.um.feri.maprri.mapa.utils.LoadIndustry;
+
+
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
 
     private ShapeRenderer shapeRenderer;
@@ -94,6 +98,12 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private com.badlogic.gdx.scenes.scene2d.ui.TextField startYearField;
     private com.badlogic.gdx.scenes.scene2d.ui.TextField endYearField;
 
+    private List<Industry> industries = new ArrayList<>();
+
+    private com.badlogic.gdx.graphics.g2d.SpriteBatch batch;
+    private Texture factoryIcon;
+    private Texture mineIcon;
+
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
@@ -104,6 +114,10 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         camera.viewportHeight = Constants.MAP_HEIGHT / 2f;
         camera.zoom = 2f;
         camera.update();
+
+        batch = new com.badlogic.gdx.graphics.g2d.SpriteBatch();
+        factoryIcon = new Texture(Gdx.files.internal("icons/factory.png"));
+        mineIcon = new Texture(Gdx.files.internal("icons/mine.png"));
 
         touchPosition = new Vector3();
 
@@ -118,40 +132,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         server = new ServerController("http://127.0.0.1:8080");
         myMines = new ArrayList<>();
 
+        industries = LoadIndustry.load();
+
         loadLocalMines();
-
-        myMines = Mine.loadMineList();
-        if (myMines == null) {
-            myMines = new ArrayList<>();
-        }
-
-        if (localMines != null) {
-            myMines.addAll(localMines);
-            System.out.println("Local mines added: " + localMines.size());
-        }
-
-
-        List<Mine> finalMyMines = myMines;
-        server.getAllMines(new NetworkCallback<List<Mine>>() {
-            @Override
-            public void onSuccess(List<Mine> result) {
-                System.out.println("Success");
-                System.out.println("MINES size: " + result.size());
-                finalMyMines.addAll(result);
-
-                Mine.saveMineListToFile(finalMyMines);
-                System.out.println("MY MINES SAVED");
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                System.out.println("ERROR:" + t.toString());
-            }
-        });
-
-        myMines = Mine.loadMineList();
-        System.out.println(myMines.size());
-        System.out.println(myMines.toString());
 
         server.getAllMines(new NetworkCallback<List<Mine>>() {
             @Override
@@ -159,11 +142,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 Gdx.app.postRunnable(() -> {
                     myMines.clear();
                     myMines.addAll(result);
-
                     if (localMines != null) {
                         myMines.addAll(localMines);
                     }
-
                     Mine.saveMineListToFile(result);
                     System.out.println("Mines loaded: " + myMines.size());
                 });
@@ -176,23 +157,20 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         });
 
         InputMultiplexer multiplexer = new InputMultiplexer();
-
         multiplexer.addProcessor(new GestureDetector(this));
-
         multiplexer.addProcessor(new InputAdapter() {
             @Override
             public boolean scrolled(float amountX, float amountY) {
                 camera.zoom += amountY * 0.1f;
                 camera.zoom = MathUtils.clamp(camera.zoom, 0.005f, 2.0f);
-
                 return true;
             }
         });
-
         Gdx.input.setInputProcessor(multiplexer);
 
         loadTilesAsync(layer);
 
+        // UI Setup
         skin = new Skin(Gdx.files.internal("metal-ui.json"));
         stage = new Stage(new ScreenViewport());
 
@@ -205,31 +183,18 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             @Override
             public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
                 if (!isDrawing) {
-                    // ZAČETEK RISANJA
                     isDrawing = true;
                     drawnPoints.clear();
                     drawnGeoPoints.clear();
                     btnAdd.setText("ZAKLJUCI");
-                    Gdx.app.log("UI", "Način risanja vklopljen.");
-
                     if (editWindow != null) editWindow.remove();
                     selectedMine = null;
-
                 } else {
-                    // KONEC RISANJA
-                    if (drawnGeoPoints.size() < 3) {
-                        Gdx.app.log("UI", "Premalo točk! Vsaj 3.");
-                        return;
-                    }
-
+                    if (drawnGeoPoints.size() < 3) return;
                     Mine newMine = createMineFromGeoPoints(drawnGeoPoints);
-
-                    // Resetiramo stanje
                     isDrawing = false;
                     btnAdd.setText("Dodaj Rudnik");
                     drawnPoints.clear();
-
-                    // Odpremo urejanje
                     selectedMine = newMine;
                     showEditPanel(newMine, true);
                 }
@@ -239,12 +204,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         uiTable.add(btnAdd).width(150).height(50);
         stage.addActor(uiTable);
 
-        multiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
-        if (multiplexer == null) {
-            multiplexer = new InputMultiplexer();
-            Gdx.input.setInputProcessor(multiplexer);
-        }
-        multiplexer.addProcessor(0, stage);
+        InputMultiplexer mainMultiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
+        mainMultiplexer.addProcessor(0, stage);
     }
 
     @Override
@@ -259,10 +220,17 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer.setView(camera);
         tiledMapRenderer.render();
 
-        drawMines();
-        drawMineEntities(true, true);
+        float ZOOM_THRESHOLD = 1f;
 
-        // risanje
+        if (camera.zoom > ZOOM_THRESHOLD) {
+            drawMineIcons();
+        } else {
+            drawMines();
+            drawMineEntities(true, true);
+        }
+
+        drawIndustries();
+
         if (isDrawing && !drawnPoints.isEmpty()) {
             shapeRenderer.setProjectionMatrix(camera.combined);
             shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
@@ -294,6 +262,69 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         stage.draw();
     }
 
+    private void drawMineIcons() {
+        if (myMines == null || myMines.isEmpty()) return;
+
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float iconSize = 25f * camera.zoom;
+        float halfSize = iconSize / 2f;
+
+        for (Mine mine : myMines) {
+            if (mine.geometry == null || mine.geometry.isEmpty()) continue;
+            double sumLat = 0;
+            double sumLng = 0;
+            int count = 0;
+
+            try {
+                float[][][] poly = mine.geometry.get(0).coordinates[0];
+                for(int i=0; i<poly[0].length; i++) {
+                    sumLat += poly[0][i][0];
+                    sumLng += poly[0][i][1];
+                    count++;
+                }
+            } catch (Exception e) { continue; }
+
+            if (count == 0) continue;
+
+            double centerLat = sumLat / count;
+            double centerLng = sumLng / count;
+
+            Vector2 pos = MapRasterTiles.getPixelPosition(centerLng, centerLat, beginTile.x, beginTile.y);
+
+            if (camera.frustum.pointInFrustum(pos.x, pos.y, 0)) {
+                batch.draw(mineIcon, pos.x - halfSize, pos.y - halfSize, iconSize, iconSize);
+            }
+        }
+        batch.end();
+    }
+
+    private void drawIndustries() {
+        if (industries == null || industries.isEmpty()) return;
+
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float iconSize = 30f * camera.zoom;
+        if(camera.zoom < 1) iconSize = 30f;
+        float halfSize = iconSize / 2f;
+
+        for (Industry ind : industries) {
+            Vector2 pos = MapRasterTiles.getPixelPosition(ind.lat, ind.lng, beginTile.x, beginTile.y);
+
+            boolean isVisible = pos.x > camera.position.x - (camera.viewportWidth * camera.zoom) &&
+                pos.x < camera.position.x + (camera.viewportWidth * camera.zoom) &&
+                pos.y > camera.position.y - (camera.viewportHeight * camera.zoom) &&
+                pos.y < camera.position.y + (camera.viewportHeight * camera.zoom);
+
+            if (isVisible) {
+                batch.draw(factoryIcon, pos.x - halfSize, pos.y - halfSize, iconSize, iconSize);
+            }
+        }
+        batch.end();
+    }
+
     private void drawMineEntities(boolean showWorkers, boolean showInfra) {
         if (myMines == null || myMines.isEmpty() || (!showWorkers && !showInfra)) return;
 
@@ -310,7 +341,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     float[][][] polygonData = border.coordinates[i];
                     if (polygonData.length == 0) continue;
 
-                    // samo enkrat za rudnik izracunamo gi lehko risemo
                     float[][] outerRing = polygonData[0];
                     float[] vertices = new float[outerRing.length * 2];
                     float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
@@ -328,13 +358,11 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     }
                     Polygon libGdxPolygon = new Polygon(vertices);
 
-                    // inftrastrukture
                     if (showInfra && mine.getInfrastructures() != null) {
                         drawRandomDotsInPolygon(mine.getInfrastructures().size(), libGdxPolygon, minX, maxX, minY, maxY,
                             Color.RED, 4.0f, mine.getName().hashCode() + 123);
                     }
 
-                    // workerji
                     if (showWorkers && mine.getWorkers() != null) {
                         drawRandomDotsInPolygon(mine.getWorkers().size(), libGdxPolygon, minX, maxX, minY, maxY,
                             Color.ORANGE, 3.0f, mine.getName().hashCode());
@@ -458,6 +486,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     @Override
     public void dispose() {
         shapeRenderer.dispose();
+        if (batch != null) batch.dispose();
+        if (factoryIcon != null) factoryIcon.dispose();
+        if (mineIcon != null) mineIcon.dispose();
     }
 
     @Override
