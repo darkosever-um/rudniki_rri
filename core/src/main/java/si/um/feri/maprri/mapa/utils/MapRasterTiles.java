@@ -17,6 +17,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,12 +41,22 @@ public class MapRasterTiles {
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(8);
 
-    private static final Map<String, Texture> tileCache = new HashMap<>();
+    // Max cache 64 tiles
+    private static final Map<String, Texture> tileCache = new java.util.LinkedHashMap<String, Texture>(100, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, Texture> eldest) {
+            if (size() > 64) {
+                eldest.getValue().dispose();
+                return true;
+            }
+            return false;
+        }
+    };
+
+    private static final java.util.Set<String> downloadingTiles = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     // dinamični load
     public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
-        // threadpool
-
         int maxTiles = (1 << zoom);
         int wrappedX = x % maxTiles;
         if (wrappedX < 0) wrappedX += maxTiles;
@@ -53,11 +64,16 @@ public class MapRasterTiles {
         final int finalX = wrappedX;
         final String key = zoom + "_" + finalX + "_" + y;
 
-
         if (tileCache.containsKey(key)) {
             callback.onTileLoaded(tileCache.get(key), x, y);
             return;
         }
+
+        if (downloadingTiles.contains(key)) {
+            return;
+        }
+
+        downloadingTiles.add(key);
 
         executor.submit(() -> {
             try {
@@ -66,14 +82,14 @@ public class MapRasterTiles {
 
                 Pixmap pixmap = new Pixmap(data, 0, data.length);
 
-                // Uporabi GPU
                 Gdx.app.postRunnable(() -> {
+                    downloadingTiles.remove(key);
+
                     if (tileCache.containsKey(key)) {
                         pixmap.dispose();
                         callback.onTileLoaded(tileCache.get(key), x, y);
                     } else {
                         Texture texture = new Texture(pixmap);
-
                         texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
 
                         tileCache.put(key, texture);
@@ -82,7 +98,8 @@ public class MapRasterTiles {
                     }
                 });
             } catch (IOException e) {
-                Gdx.app.error("MapRasterTiles", "Napaka pri nalaganju ploščice: " + zoom + "/" + x + "/" + y, e);
+                downloadingTiles.remove(key);
+                Gdx.app.error("MapRasterTiles", "Failed tile: " + key);
             }
         });
     }

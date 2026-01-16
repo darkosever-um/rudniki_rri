@@ -4,11 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
+import com.badlogic.gdx.utils.ShortArray;
+
 import si.um.feri.maprri.models.enums.MineStatus;
 import si.um.feri.maprri.models.enums.MineType;
 
@@ -57,22 +58,6 @@ public class Mine implements Json.Serializable {
         this.modified = modified;
     }
 
-    // Preveri ali so podatki validi
-    public boolean validateMineData() {
-        boolean isLocationValid = (lat != null && lat >= -90.0 && lat <= 90.0) &&
-            (lon != null && lon >= -180.0 && lon <= 180.0);
-
-        boolean areYearsValid = true;
-        if (startYear != null && endYear != null) {
-            areYearsValid = endYear >= startYear;
-        }
-
-        return name != null && !name.isEmpty() &&
-            status != null &&
-            type != null &&
-            isLocationValid &&
-            areYearsValid;
-    }
 
     public static Mine getMineFromJson(String jsonStr){
         try{
