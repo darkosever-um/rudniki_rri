@@ -76,6 +76,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private com.badlogic.gdx.scenes.scene2d.ui.Window editWindow;
     private com.badlogic.gdx.scenes.scene2d.ui.TextField nameField;
 
+    // Zoom level
+    private int currentMapZoom = Constants.ZOOM;
+
     // stanje za risanje
     private boolean isDrawing = false;
     private List<Vector2> drawnPoints = new ArrayList<>(); // Točke v pikslih za izrisovanje črt med risanjem
@@ -254,6 +257,36 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         handleInput();
 
+        boolean mapChanged = false;
+
+        // ZOOM IN. Detail++
+        if (camera.zoom < 0.5f && currentMapZoom < 19) {
+            currentMapZoom++;
+            camera.zoom = 1.0f;
+            mapChanged = true;
+        }
+
+        // ZOOM OUT. Detail--
+        else if (camera.zoom > 2.0f && currentMapZoom > 2) {
+            currentMapZoom--;
+            camera.zoom = 1.0f;
+            mapChanged = true;
+        }
+
+        float centerX = Constants.MAP_WIDTH / 2f;
+        float centerY = Constants.MAP_HEIGHT / 2f;
+        if (Math.abs(camera.position.x - centerX) > MapRasterTiles.TILE_SIZE ||
+            Math.abs(camera.position.y - centerY) > MapRasterTiles.TILE_SIZE) {
+            mapChanged = true;
+        }
+
+        if (mapChanged) {
+            updateTiles();
+
+            camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
+            camera.update();
+        }
+
         camera.update();
 
         tiledMapRenderer.setView(camera);
@@ -317,7 +350,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
 
                     for (int k = 0; k < outerRing.length; k++) {
-                        Vector2 pixelPos = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y);
+                        Vector2 pixelPos = MapRasterTiles.getPixelPosition(outerRing[k][1], outerRing[k][0], beginTile.x, beginTile.y, currentMapZoom);
                         vertices[k * 2] = pixelPos.x;
                         vertices[k * 2 + 1] = pixelPos.y;
 
@@ -448,7 +481,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private float[] getVertices(float[][] ring) {
         float[] vertices = new float[ring.length * 2];
         for (int k = 0; k < ring.length; k++) {
-            Vector2 p = MapRasterTiles.getPixelPosition(ring[k][1], ring[k][0], beginTile.x, beginTile.y);
+            Vector2 p = MapRasterTiles.getPixelPosition(ring[k][1], ring[k][0], beginTile.x, beginTile.y, currentMapZoom);
             vertices[k * 2] = p.x;
             vertices[k * 2 + 1] = p.y;
         }
@@ -588,7 +621,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 final int cellX = i;
                 final int cellY = j;
 
-                MapRasterTiles.loadTileAsync(Constants.ZOOM, tileX, tileY, new MapRasterTiles.TileLoadedCallback() {
+                MapRasterTiles.loadTileAsync(currentMapZoom, tileX, tileY, new MapRasterTiles.TileLoadedCallback() {
                     @Override
                     public void onTileLoaded(Texture texture, int x, int y) { // ko je nalozena slika
                         TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
@@ -765,5 +798,34 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         stage.addActor(editWindow);
         stage.setKeyboardFocus(nameField);
+    }
+
+    // Funkcija preveri, ki je kamera da lahko naložimo nove tile
+    private void updateTiles() {
+
+        // Sredina kamere
+        Geolocation centerGeo = si.um.feri.maprri.mapa.utils.GeoUtils.unprojectMapCoordinates(
+            camera.position.x,
+            camera.position.y,
+            beginTile
+        );
+
+        ZoomXY centerTile = MapRasterTiles.getTileNumber(centerGeo.lat, centerGeo.lng, currentMapZoom);
+
+        beginTile = new ZoomXY(currentMapZoom,
+            centerTile.x - ((Constants.NUM_TILES - 1) / 2),
+            centerTile.y - ((Constants.NUM_TILES - 1) / 2)
+        );
+
+        // Novi layer
+        TiledMapTileLayer layer = (TiledMapTileLayer) tiledMap.getLayers().get(0);
+
+        for(int x=0; x<Constants.NUM_TILES; x++) {
+            for(int y=0; y<Constants.NUM_TILES; y++) {
+                layer.setCell(x, y, null);
+            }
+        }
+
+        loadTilesAsync(layer);
     }
 }

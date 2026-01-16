@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
 
 public class MapRasterTiles {
     //Mapbox
@@ -28,7 +29,7 @@ public class MapRasterTiles {
     //https://www.geoapify.com/get-started-with-maps-api
     static String mapServiceUrl = "https://maps.geoapify.com/v1/tile/";
     static String token = "?&apiKey=" + Keys.GEOAPIFY;
-    static String tilesetId = "osm-carto";
+    static String tilesetId = "osm-bright";
     static String format = "@2x.png";
 
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
@@ -38,7 +39,16 @@ public class MapRasterTiles {
     public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
         new Thread(() -> {
             try {
-                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+
+                int maxTiles = (1 << zoom);
+                int wrappedX = x % maxTiles;
+                if (wrappedX < 0) {
+                    wrappedX += maxTiles;
+                }
+                // ----------------------------------------
+
+                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + wrappedX + "/" + y + format + token);
+
                 ByteArrayOutputStream bis = fetchTile(url);
                 byte[] data = bis.toByteArray();
 
@@ -65,10 +75,30 @@ public class MapRasterTiles {
      * @return
      * @throws IOException
      */
+    private static HashMap<String, Texture> tileCache = new HashMap<>();
+
     public static Texture getRasterTile(int zoom, int x, int y) throws IOException {
-        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+        int maxTiles = (1 << zoom);
+
+        x = x % maxTiles;
+        if (x < 0) {
+            x += maxTiles;
+        }
+
+        String key = zoom + "_" + x + "_" + y;
+        if (tileCache.containsKey(key)) {
+            return tileCache.get(key);
+        }
+
+        String urlString = mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token;
+
+        URL url = new URL(urlString);
         ByteArrayOutputStream bis = fetchTile(url);
-        return getTexture(bis.toByteArray());
+        Texture texture = getTexture(bis.toByteArray());
+
+        tileCache.put(key, texture);
+
+        return texture;
     }
 
     /**
@@ -228,10 +258,10 @@ public class MapRasterTiles {
         );
     }
 
-    public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY) {
+    public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY, int currentZoom) {
         double[] worldCoordinate = project(lat, lng, MapRasterTiles.TILE_SIZE);
         // Scale to fit our image
-        double scale = Math.pow(2, Constants.ZOOM);
+        double scale = Math.pow(2, currentZoom);
 
         // Apply scale to world coordinates to get image coordinates
         return new Vector2(
