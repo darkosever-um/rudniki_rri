@@ -35,19 +35,19 @@ import com.badlogic.gdx.utils.ShortArray;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.graphhopper.util.PointList;
 import si.um.feri.maprri.ServerController;
 import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
-import si.um.feri.maprri.models.Borders;
-import si.um.feri.maprri.models.Mine;
+import si.um.feri.maprri.models.*;
+import si.um.feri.maprri.util.InfrastructurePath;
 import si.um.feri.maprri.util.NetworkCallback;
 
 import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
-import si.um.feri.maprri.models.Industry;
 import si.um.feri.maprri.mapa.utils.LoadIndustry;
 
 
@@ -99,6 +99,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private com.badlogic.gdx.scenes.scene2d.ui.TextField endYearField;
 
     private List<Industry> industries = new ArrayList<>();
+    private List<PathInfo> allPaths = new ArrayList<>();
 
     private com.badlogic.gdx.graphics.g2d.SpriteBatch batch;
     private Texture factoryIcon;
@@ -134,7 +135,30 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         industries = LoadIndustry.load();
 
+        for(Industry industry : industries){
+
+        }
+
         loadLocalMines();
+
+        //Load graphhopper:
+        new Thread(() -> {
+            InfrastructurePath.init();
+
+            Gdx.app.postRunnable(() -> {
+                if (!myMines.isEmpty() && !industries.isEmpty()) {
+                    for(Mine mine : myMines){
+                        List<Infrastructure> infrastructure = mine.getInfrastructures();
+                        for(int i = 0; i < infrastructure.size()-1; i++){
+                            int randomNum = (int)(Math.random() * (industries.size() - 1));
+                            Industry industry = industries.get(randomNum);
+                            PathInfo points = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+                            allPaths.add(points);
+                        }
+                    }
+                }
+            });
+        }).start();
 
         server.getAllMines(new NetworkCallback<List<Mine>>() {
             @Override
@@ -230,6 +254,12 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         }
 
         drawIndustries();
+
+        if(!allPaths.isEmpty()){
+            for(PathInfo path : allPaths){
+                drawPath(path.points);
+            }
+        }
 
         if (isDrawing && !drawnPoints.isEmpty()) {
             shapeRenderer.setProjectionMatrix(camera.combined);
@@ -481,6 +511,38 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             vertices[k * 2 + 1] = p.y;
         }
         return vertices;
+    }
+
+    public void drawPath(PointList path){
+        if(path == null || path.isEmpty()){
+            return;
+        }
+
+        Color randomColor = new Color(
+            (float)Math.random(),
+            (float)Math.random(),
+            (float)Math.random(),
+            1f
+        );
+
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(Color.RED);
+
+        float lineWidth = 10f * camera.zoom;
+
+        for(int i = 0; i < path.size() - 1; i++){
+            double lat1 = path.getLat(i);
+            double lon1 = path.getLon(i);
+            double lat2 = path.getLat(i+1);
+            double lon2 = path.getLon(i+1);
+
+            Vector2 point1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y);
+            Vector2 point2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y);
+
+            shapeRenderer.rectLine(point1.x, point1.y, point2.x, point2.y, lineWidth);
+        }
+        shapeRenderer.end();
     }
 
     @Override

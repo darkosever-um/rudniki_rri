@@ -54,6 +54,8 @@ configure(subprojects) {
 
   dependencies {
     implementation 'org.json:json:20240303'
+    implementation 'com.graphhopper:graphhopper-core:9.1'
+    implementation 'org.slf4j:slf4j-simple:2.0.7'
   }
 }
 

@@ -227,6 +227,9 @@ public class Mine implements Json.Serializable {
         return infrastructure;
     }
 
+    public double getLat() { return lat; }
+    public double getLon() {return lon;}
+
     public void setName(String text) {
         name = text;
     }
@@ -272,5 +275,32 @@ public class Mine implements Json.Serializable {
 
     public void setMunicipality(String text) {
         municipality = text;
+    }
+
+    public String toString(){
+        String mineStr =  id + "\n"
+            + "Name: " + name + "\n"
+            + "Municipality: " + municipality + "\n"
+            + "Start year: " + startYear + "\n"
+            + "End year: " + endYear + "\n"
+            + "Locataion: (" + lon + "," + lat + ")\n"
+            + "Owner id: " + ownerId + "\n"
+            + "Status: " + status + "\n"
+            + "Type: " + type + "\n"
+            + "Date created: " + created + "\n"
+            + "Date modified: " + modified + "\n";
+        mineStr += "\nMINERALS: ";
+        for(Mineral item : minerals){
+            mineStr += item.toString();
+        }
+        mineStr += "\nINFRASTRUCTURE: ";
+        for(Infrastructure item : infrastructure){
+            mineStr += item.toString();
+        }
+        mineStr += "\nWORKERS: ";
+        for(Worker item : workers){
+            mineStr += item.toString();
+        }
+        return mineStr;
     }
 }

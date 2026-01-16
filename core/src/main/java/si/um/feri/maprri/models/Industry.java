@@ -10,4 +10,9 @@ public class Industry {
         this.lat = lat;
         this.lng = lng;
     }
+
+    public String toString(){
+        return "Name: " + name
+            + "\nLat,Lng = [" + lat + "," + lng + "]\n";
+    }
 }
