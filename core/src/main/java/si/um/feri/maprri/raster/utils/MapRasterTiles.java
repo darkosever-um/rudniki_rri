@@ -28,11 +28,11 @@ public class MapRasterTiles {
     //Geoapify
     //https://www.geoapify.com/get-started-with-maps-api
     static String mapServiceUrl = "https://maps.geoapify.com/v1/tile/";
-    static String token = "?&apiKey=" + si.um.feri.maprri.raster.utils.Keys.GEOAPIFY;
-    static String tilesetId = "klokantech-basic";
-    static String format = "@2x.png";
+    static String token = "?apiKey=" + si.um.feri.maprri.raster.utils.Keys.GEOAPIFY;
 
-    //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
+    static String tilesetId = "osm-carto";
+
+    static String format = "@2x.png";
     final static public int TILE_SIZE = 512;
 
     /**
@@ -45,7 +45,12 @@ public class MapRasterTiles {
      * @throws IOException
      */
     public static Texture getRasterTile(int zoom, int x, int y) throws IOException {
-        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+        String urlString = mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token;
+
+        System.out.println("REQUESTING: " + urlString);
+
+        URL url = new URL(urlString);
+
         ByteArrayOutputStream bis = fetchTile(url);
         return getTexture(bis.toByteArray());
     }
@@ -117,6 +122,12 @@ public class MapRasterTiles {
         InputStream is = url.openStream();
         byte[] bytebuff = new byte[4096];
         int n;
+
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("GET");
+
+        connection.setRequestProperty("User-Agent", "FERI-IME-Rudniki-Projekt/1.0");
+        connection.connect();
 
         while ((n = is.read(bytebuff)) > 0) {
             bis.write(bytebuff, 0, n);
