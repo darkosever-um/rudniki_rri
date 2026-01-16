@@ -6,7 +6,7 @@ public class GeoUtils {
      * Pretvori koordinate na zaslonu (x, y) v GPS (lat, lon).
      */
     public static Geolocation unprojectMapCoordinates(float x, float y, ZoomXY beginTile) {
-        double mapSize = MapRasterTiles.TILE_SIZE * Math.pow(2, Constants.ZOOM);
+        double mapSize = MapRasterTiles.TILE_SIZE * Math.pow(2, beginTile.zoom);
         double globalPixelX = (beginTile.x * MapRasterTiles.TILE_SIZE) + x;
         double globalPixelY = (beginTile.y * MapRasterTiles.TILE_SIZE) + (Constants.NUM_TILES * MapRasterTiles.TILE_SIZE) - y;
 

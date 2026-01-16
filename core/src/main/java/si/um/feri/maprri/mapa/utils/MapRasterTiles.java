@@ -15,6 +15,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MapRasterTiles {
     //Mapbox
@@ -28,29 +33,89 @@ public class MapRasterTiles {
     //https://www.geoapify.com/get-started-with-maps-api
     static String mapServiceUrl = "https://maps.geoapify.com/v1/tile/";
     static String token = "?&apiKey=" + Keys.GEOAPIFY;
-    static String tilesetId = "klokantech-basic";
+    static String tilesetId = "osm-bright";
     static String format = "@2x.png";
 
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
     final static public int TILE_SIZE = 512;
 
+    private static final ExecutorService executor = Executors.newFixedThreadPool(8);
+
+    // Max cache 64 tiles
+    private static final Map<String, Texture> tileCache = new java.util.LinkedHashMap<String, Texture>(100, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, Texture> eldest) {
+            if (size() > 64) {
+                eldest.getValue().dispose();
+                return true;
+            }
+            return false;
+        }
+    };
+
+    private static final java.util.Set<String> downloadingTiles = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
     // dinamični load
     public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
-        new Thread(() -> {
+        int maxTiles = (1 << zoom);
+        int wrappedX = x % maxTiles;
+        if (wrappedX < 0) wrappedX += maxTiles;
+
+        final int finalX = wrappedX;
+        final String key = zoom + "_" + finalX + "_" + y;
+
+        if (tileCache.containsKey(key)) {
+            callback.onTileLoaded(tileCache.get(key), x, y);
+            return;
+        }
+
+        if (downloadingTiles.contains(key)) {
+            return;
+        }
+
+        downloadingTiles.add(key);
+
+        executor.submit(() -> {
             try {
-                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
-                ByteArrayOutputStream bis = fetchTile(url);
-                byte[] data = bis.toByteArray();
+                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + finalX + "/" + y + format + token);
+                byte[] data = fetchTileBytes(url);
+
+                Pixmap pixmap = new Pixmap(data, 0, data.length);
 
                 Gdx.app.postRunnable(() -> {
-                    Texture texture = getTexture(data);
-                    callback.onTileLoaded(texture, x, y);
+                    downloadingTiles.remove(key);
+
+                    if (tileCache.containsKey(key)) {
+                        pixmap.dispose();
+                        callback.onTileLoaded(tileCache.get(key), x, y);
+                    } else {
+                        Texture texture = new Texture(pixmap);
+                        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+
+                        tileCache.put(key, texture);
+                        pixmap.dispose();
+                        callback.onTileLoaded(texture, x, y);
+                    }
                 });
             } catch (IOException e) {
-                Gdx.app.error("MapRasterTiles", "Napaka pri nalaganju ploščice: " + zoom + "/" + x + "/" + y, e);
+                downloadingTiles.remove(key);
+                Gdx.app.error("MapRasterTiles", "Failed tile: " + key);
             }
-        }).start();
+        });
     }
+
+    private static byte[] fetchTileBytes(URL url) throws IOException {
+        ByteArrayOutputStream bis = new ByteArrayOutputStream();
+        InputStream is = url.openStream();
+        byte[] bytebuff = new byte[4096];
+        int n;
+
+        while ((n = is.read(bytebuff)) > 0) {
+            bis.write(bytebuff, 0, n);
+        }
+        return bis.toByteArray();
+    }
+
 
     public interface TileLoadedCallback {
         void onTileLoaded(Texture texture, int x, int y); // override v Mapa.java
@@ -65,10 +130,29 @@ public class MapRasterTiles {
      * @return
      * @throws IOException
      */
+
     public static Texture getRasterTile(int zoom, int x, int y) throws IOException {
-        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+        int maxTiles = (1 << zoom);
+
+        x = x % maxTiles;
+        if (x < 0) {
+            x += maxTiles;
+        }
+
+        String key = zoom + "_" + x + "_" + y;
+        if (tileCache.containsKey(key)) {
+            return tileCache.get(key);
+        }
+
+        String urlString = mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token;
+
+        URL url = new URL(urlString);
         ByteArrayOutputStream bis = fetchTile(url);
-        return getTexture(bis.toByteArray());
+        Texture texture = getTexture(bis.toByteArray());
+
+        tileCache.put(key, texture);
+
+        return texture;
     }
 
     /**
@@ -228,10 +312,10 @@ public class MapRasterTiles {
         );
     }
 
-    public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY) {
+    public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY, int currentZoom) {
         double[] worldCoordinate = project(lat, lng, MapRasterTiles.TILE_SIZE);
         // Scale to fit our image
-        double scale = Math.pow(2, Constants.ZOOM);
+        double scale = Math.pow(2, currentZoom);
 
         // Apply scale to world coordinates to get image coordinates
         return new Vector2(
