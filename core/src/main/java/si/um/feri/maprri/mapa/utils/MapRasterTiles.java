@@ -16,6 +16,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MapRasterTiles {
     //Mapbox
@@ -35,32 +38,67 @@ public class MapRasterTiles {
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
     final static public int TILE_SIZE = 512;
 
+    private static final ExecutorService executor = Executors.newFixedThreadPool(8);
+
+    private static final Map<String, Texture> tileCache = new HashMap<>();
+
     // dinamični load
     public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
-        new Thread(() -> {
+        // threadpool
+
+        int maxTiles = (1 << zoom);
+        int wrappedX = x % maxTiles;
+        if (wrappedX < 0) wrappedX += maxTiles;
+
+        final int finalX = wrappedX;
+        final String key = zoom + "_" + finalX + "_" + y;
+
+
+        if (tileCache.containsKey(key)) {
+            callback.onTileLoaded(tileCache.get(key), x, y);
+            return;
+        }
+
+        executor.submit(() -> {
             try {
+                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + finalX + "/" + y + format + token);
+                byte[] data = fetchTileBytes(url);
 
-                int maxTiles = (1 << zoom);
-                int wrappedX = x % maxTiles;
-                if (wrappedX < 0) {
-                    wrappedX += maxTiles;
-                }
-                // ----------------------------------------
+                Pixmap pixmap = new Pixmap(data, 0, data.length);
 
-                URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + wrappedX + "/" + y + format + token);
-
-                ByteArrayOutputStream bis = fetchTile(url);
-                byte[] data = bis.toByteArray();
-
+                // Uporabi GPU
                 Gdx.app.postRunnable(() -> {
-                    Texture texture = getTexture(data);
-                    callback.onTileLoaded(texture, x, y);
+                    if (tileCache.containsKey(key)) {
+                        pixmap.dispose();
+                        callback.onTileLoaded(tileCache.get(key), x, y);
+                    } else {
+                        Texture texture = new Texture(pixmap);
+
+                        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+
+                        tileCache.put(key, texture);
+                        pixmap.dispose();
+                        callback.onTileLoaded(texture, x, y);
+                    }
                 });
             } catch (IOException e) {
                 Gdx.app.error("MapRasterTiles", "Napaka pri nalaganju ploščice: " + zoom + "/" + x + "/" + y, e);
             }
-        }).start();
+        });
     }
+
+    private static byte[] fetchTileBytes(URL url) throws IOException {
+        ByteArrayOutputStream bis = new ByteArrayOutputStream();
+        InputStream is = url.openStream();
+        byte[] bytebuff = new byte[4096];
+        int n;
+
+        while ((n = is.read(bytebuff)) > 0) {
+            bis.write(bytebuff, 0, n);
+        }
+        return bis.toByteArray();
+    }
+
 
     public interface TileLoadedCallback {
         void onTileLoaded(Texture texture, int x, int y); // override v Mapa.java
@@ -75,7 +113,6 @@ public class MapRasterTiles {
      * @return
      * @throws IOException
      */
-    private static HashMap<String, Texture> tileCache = new HashMap<>();
 
     public static Texture getRasterTile(int zoom, int x, int y) throws IOException {
         int maxTiles = (1 << zoom);
