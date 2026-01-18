@@ -303,4 +303,11 @@ public class Mine implements Json.Serializable {
         }
         return mineStr;
     }
+
+    public void setLat(double v) {
+        lat = v;
+    }
+    public void setLon(double v) {
+        lon = v;
+    }
 }

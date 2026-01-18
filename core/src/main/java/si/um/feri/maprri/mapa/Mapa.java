@@ -39,6 +39,7 @@ import com.graphhopper.util.PointList;
 import si.um.feri.maprri.ServerController;
 import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
+import si.um.feri.maprri.mapa.utils.Legend;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
 import si.um.feri.maprri.models.*;
@@ -49,6 +50,7 @@ import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import si.um.feri.maprri.mapa.utils.LoadIndustry;
+import sun.security.tools.PathList;
 
 
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
@@ -105,6 +107,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private Texture factoryIcon;
     private Texture mineIcon;
 
+    private Legend legend;
+
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
@@ -135,10 +139,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         industries = LoadIndustry.load();
 
-        for(Industry industry : industries){
-
-        }
-
         loadLocalMines();
 
         //Load graphhopper:
@@ -152,8 +152,19 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                         for(int i = 0; i < infrastructure.size()-1; i++){
                             int randomNum = (int)(Math.random() * (industries.size() - 1));
                             Industry industry = industries.get(randomNum);
-                            PathInfo points = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
-                            allPaths.add(points);
+                            PathInfo points = InfrastructurePath.findPath(
+                                mine.getLat(),
+                                mine.getLon(),
+                                industry.lat,
+                                industry.lng
+                            );
+                            if (points != null) {
+                                allPaths.add(points);
+
+                                for (Infrastructure infra : mine.getInfrastructures()) {
+                                    infra.setPath(PathInfo.points);
+                                }
+                            }
                         }
                     }
                 }
@@ -228,6 +239,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         uiTable.add(btnAdd).width(150).height(50);
         stage.addActor(uiTable);
 
+        legend = new Legend(skin, stage);
+
         InputMultiplexer mainMultiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
         mainMultiplexer.addProcessor(0, stage);
     }
@@ -275,7 +288,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             if (drawnPoints.size() > 2) {
                 Vector2 first = drawnPoints.get(0);
                 Vector2 last = drawnPoints.get(drawnPoints.size() - 1);
-                shapeRenderer.setColor(Color.ORANGE); // Oranžna za "zapiralno" črto
+                shapeRenderer.setColor(Color.ORANGE);
                 shapeRenderer.line(last.x, last.y, first.x, first.y);
             }
             shapeRenderer.end();
@@ -287,6 +300,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             }
             shapeRenderer.end();
         }
+
+        legend.draw(batch, shapeRenderer);
 
         stage.act(Gdx.graphics.getDeltaTime());
         stage.draw();
@@ -361,6 +376,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
+        float delta = Gdx.graphics.getDeltaTime();
+
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
 
@@ -388,14 +405,28 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     }
                     Polygon libGdxPolygon = new Polygon(vertices);
 
-                    if (showInfra && mine.getInfrastructures() != null) {
-                        drawRandomDotsInPolygon(mine.getInfrastructures().size(), libGdxPolygon, minX, maxX, minY, maxY,
-                            Color.RED, 4.0f, mine.getName().hashCode() + 123);
-                    }
-
                     if (showWorkers && mine.getWorkers() != null) {
                         drawRandomDotsInPolygon(mine.getWorkers().size(), libGdxPolygon, minX, maxX, minY, maxY,
-                            Color.ORANGE, 3.0f, mine.getName().hashCode());
+                            Color.YELLOW, 4.0f, mine.getName().hashCode() + 123);
+                    }
+
+                    if (showInfra && mine.getInfrastructures() != null) {
+                        for (Infrastructure infra : mine.getInfrastructures()) {
+                            if (infra.isMoving()) {
+                                infra.update(delta, beginTile);
+                                if (infra.isReturning()) {
+                                    shapeRenderer.setColor(Color.ORANGE);
+                                } else {
+                                    shapeRenderer.setColor(Color.RED);
+                                }
+
+                                Vector2 pos = infra.getCurrentPixelPos();
+                                float size = 5.0f * camera.zoom;
+                                if (size < 2f) size = 2f;
+
+                                shapeRenderer.circle(pos.x, pos.y, size);
+                            }
+                        }
                     }
                 }
             }
@@ -453,7 +484,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA, com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
-        // naredimo vse fille
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
@@ -463,8 +493,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     if (polygon.length == 0) continue;
                     float[] vertices = getVertices(polygon[0]);
 
-                    // za izbroni rudnik damo drugo barvo
-                    if (mine == selectedMine) shapeRenderer.setColor(new Color(1f, 1f, 0f, 0.4f)); // Rumena
+                    if (mine == selectedMine) shapeRenderer.setColor(new Color(0f, 1f, 0f, 0.4f)); // Rumena
                     else shapeRenderer.setColor(new Color(0.2f, 0.5f, 1f, 0.3f)); // Modra
 
                     try {
@@ -527,7 +556,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.RED);
+        shapeRenderer.setColor(Color.LIGHT_GRAY);
+//        shapeRenderer.setColor(1f, 1f, 0f, 0.5f);
 
         float lineWidth = 10f * camera.zoom;
 
@@ -822,6 +852,23 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 updateInfrastructureList(mine, newInfraCount);
 
                 if (isNew) {
+                    if(!mine.getInfrastructures().isEmpty()){
+                        int randomNum = (int)(Math.random() * (industries.size() - 1));
+                        Industry industry = industries.get(randomNum);
+                        PathInfo points = InfrastructurePath.findPath(
+                            mine.getLat(),
+                            mine.getLon(),
+                            industry.lat,
+                            industry.lng
+                        );
+                        if (points != null) {
+                            allPaths.add(points);
+                            for (Infrastructure infra : mine.getInfrastructures()) {
+                                infra.setPath(PathInfo.points);
+                            }
+                        }
+                    }
+
                     localMines.add(mine);
                     myMines.add(mine);
                 }

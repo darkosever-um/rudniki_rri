@@ -4,8 +4,11 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;
 import si.um.feri.maprri.models.enums.InfrastructureStatus;
-
-import java.net.IDN;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
+import com.graphhopper.util.PointList;
+import si.um.feri.maprri.mapa.utils.MapRasterTiles;
+import si.um.feri.maprri.mapa.utils.ZoomXY;
 
 public class Infrastructure implements Json.Serializable {
     private String brand;
@@ -17,6 +20,17 @@ public class Infrastructure implements Json.Serializable {
     private Integer kilometer;
 
     public Infrastructure(){}
+
+    // za animacijo start
+    private PointList path;
+    private int currentPointIndex = 0;
+    private float progress = 0;
+    private float speed;
+    private Vector2 currentPixelPos = new Vector2();
+    private boolean hasPath = false;
+    private boolean returning = false;
+    private float waitTimer = 0;
+    // za animacijo end
 
     public Infrastructure(String brand,
                           String model,
@@ -104,4 +118,80 @@ public class Infrastructure implements Json.Serializable {
         + "Operation hours: " + operatingHours + "\n"
         + "Kilometers: " + kilometer + "\n";
     }
+
+    public void setPath(PointList pointList) {
+        this.path = pointList;
+        if (path != null && path.size() > 1) {
+            this.hasPath = true;
+            this.speed = MathUtils.random(4.0f, 5.0f);
+            this.currentPointIndex = MathUtils.random(0, path.size() - 2);
+            this.progress = MathUtils.random(0f, 1f);
+        }
+    }
+
+    public void update(float delta, ZoomXY beginTile) {
+        if (!hasPath) return;
+
+        if (waitTimer > 0) {
+            waitTimer -= delta;
+            return;
+        }
+
+        int nextIdx = returning ? currentPointIndex - 1 : currentPointIndex + 1;
+
+        if (nextIdx < 0 || nextIdx >= path.size()) {
+            handlePathEnd();
+            return;
+        }
+
+        Vector2 p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y);
+        Vector2 p2 = MapRasterTiles.getPixelPosition(path.getLat(nextIdx), path.getLon(nextIdx), beginTile.x, beginTile.y);
+
+        float segmentDistance = p1.dst(p2);
+
+        if (segmentDistance > 0) {
+            progress += (speed / segmentDistance) * delta;
+        } else {
+            progress = 1.1f;
+        }
+
+        if (progress >= 1.0f) {
+            progress = 0;
+            currentPointIndex = nextIdx;
+
+            if ((!returning && currentPointIndex >= path.size() - 1) || (returning && currentPointIndex <= 0)) {
+                handlePathEnd();
+            }
+        }
+
+        p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y);
+        int p2Idx = returning ? currentPointIndex - 1 : currentPointIndex + 1;
+        if (p2Idx < 0) p2Idx = 0;
+        if (p2Idx >= path.size()) p2Idx = path.size() - 1;
+        p2 = MapRasterTiles.getPixelPosition(path.getLat(p2Idx), path.getLon(p2Idx), beginTile.x, beginTile.y);
+
+        currentPixelPos.x = MathUtils.lerp(p1.x, p2.x, Math.min(progress, 1.0f));
+        currentPixelPos.y = MathUtils.lerp(p1.y, p2.y, Math.min(progress, 1.0f));
+    }
+
+    private void handlePathEnd() {
+        if (!returning) {
+            returning = true;
+            currentPointIndex = path.size() - 1;
+        } else {
+            returning = false;
+            currentPointIndex = 0;
+        }
+        progress = 0;
+        waitTimer = 2.0f;
+    }
+
+    public Vector2 getCurrentPixelPos() {
+        return currentPixelPos;
+    }
+
+    public boolean isMoving() {
+        return hasPath;
+    }
+    public boolean isReturning() { return returning; }
 }
