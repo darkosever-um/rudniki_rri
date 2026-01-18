@@ -34,6 +34,10 @@ public class MineFactory {
         geometry.add(border);
         mine.geometry = geometry;
 
+        mine.setLat(geoPoints.get(0)[0]);
+        mine.setLon(geoPoints.get(0)[1]);
+
+
         return mine;
     }
 

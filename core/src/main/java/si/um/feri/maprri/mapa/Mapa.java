@@ -35,17 +35,23 @@ import com.badlogic.gdx.utils.ShortArray;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.graphhopper.util.PointList;
 import si.um.feri.maprri.ServerController;
 import si.um.feri.maprri.mapa.utils.Constants;
 import si.um.feri.maprri.mapa.utils.Geolocation;
+import si.um.feri.maprri.mapa.utils.Legend;
 import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
-import si.um.feri.maprri.models.Borders;
-import si.um.feri.maprri.models.Mine;
+import si.um.feri.maprri.models.*;
+import si.um.feri.maprri.util.InfrastructurePath;
 import si.um.feri.maprri.util.NetworkCallback;
 
 import com.badlogic.gdx.math.EarClippingTriangulator;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+
+import si.um.feri.maprri.mapa.utils.LoadIndustry;
+import sun.security.tools.PathList;
+
 
 public class Mapa extends ApplicationAdapter implements GestureDetector.GestureListener {
 
@@ -97,6 +103,15 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private com.badlogic.gdx.scenes.scene2d.ui.TextField startYearField;
     private com.badlogic.gdx.scenes.scene2d.ui.TextField endYearField;
 
+    private List<Industry> industries = new ArrayList<>();
+    private List<PathInfo> allPaths = new ArrayList<>();
+
+    private com.badlogic.gdx.graphics.g2d.SpriteBatch batch;
+    private Texture factoryIcon;
+    private Texture mineIcon;
+
+    private Legend legend;
+
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
@@ -107,6 +122,10 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         camera.viewportHeight = Constants.MAP_HEIGHT / 2f;
         camera.zoom = 2f;
         camera.update();
+
+        batch = new com.badlogic.gdx.graphics.g2d.SpriteBatch();
+        factoryIcon = new Texture(Gdx.files.internal("icons/factory.png"));
+        mineIcon = new Texture(Gdx.files.internal("icons/mine.png"));
 
         touchPosition = new Vector3();
 
@@ -121,40 +140,39 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         server = new ServerController("http://127.0.0.1:8080");
         myMines = new ArrayList<>();
 
+        industries = LoadIndustry.load();
+
         loadLocalMines();
 
-        myMines = Mine.loadMineList();
-        if (myMines == null) {
-            myMines = new ArrayList<>();
-        }
+        //Load graphhopper:
+        new Thread(() -> {
+            InfrastructurePath.init();
 
-        if (localMines != null) {
-            myMines.addAll(localMines);
-            System.out.println("Local mines added: " + localMines.size());
-        }
+            Gdx.app.postRunnable(() -> {
+                if (!myMines.isEmpty() && !industries.isEmpty()) {
+                    for(Mine mine : myMines){
+                        List<Infrastructure> infrastructure = mine.getInfrastructures();
+                        for(int i = 0; i < infrastructure.size()-1; i++){
+                            int randomNum = (int)(Math.random() * (industries.size() - 1));
+                            Industry industry = industries.get(randomNum);
+                            PathInfo points = InfrastructurePath.findPath(
+                                mine.getLat(),
+                                mine.getLon(),
+                                industry.lat,
+                                industry.lng
+                            );
+                            if (points != null) {
+                                allPaths.add(points);
 
-
-        List<Mine> finalMyMines = myMines;
-        server.getAllMines(new NetworkCallback<List<Mine>>() {
-            @Override
-            public void onSuccess(List<Mine> result) {
-                System.out.println("Success");
-                System.out.println("MINES size: " + result.size());
-                finalMyMines.addAll(result);
-
-                Mine.saveMineListToFile(finalMyMines);
-                System.out.println("MY MINES SAVED");
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                System.out.println("ERROR:" + t.toString());
-            }
-        });
-
-        myMines = Mine.loadMineList();
-        System.out.println(myMines.size());
-        System.out.println(myMines.toString());
+                                for (Infrastructure infra : mine.getInfrastructures()) {
+                                    infra.setPath(PathInfo.points);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }).start();
 
         server.getAllMines(new NetworkCallback<List<Mine>>() {
             @Override
@@ -162,11 +180,9 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 Gdx.app.postRunnable(() -> {
                     myMines.clear();
                     myMines.addAll(result);
-
                     if (localMines != null) {
                         myMines.addAll(localMines);
                     }
-
                     Mine.saveMineListToFile(result);
                     System.out.println("Mines loaded: " + myMines.size());
                 });
@@ -179,23 +195,20 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         });
 
         InputMultiplexer multiplexer = new InputMultiplexer();
-
         multiplexer.addProcessor(new GestureDetector(this));
-
         multiplexer.addProcessor(new InputAdapter() {
             @Override
             public boolean scrolled(float amountX, float amountY) {
                 camera.zoom += amountY * 0.1f;
                 camera.zoom = MathUtils.clamp(camera.zoom, 0.005f, 2.2f);
-
                 return true;
             }
         });
-
         Gdx.input.setInputProcessor(multiplexer);
 
         loadTilesAsync(layer);
 
+        // UI Setup
         skin = new Skin(Gdx.files.internal("metal-ui.json"));
         stage = new Stage(new ScreenViewport());
 
@@ -208,31 +221,18 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             @Override
             public void clicked(com.badlogic.gdx.scenes.scene2d.InputEvent event, float x, float y) {
                 if (!isDrawing) {
-                    // ZAČETEK RISANJA
                     isDrawing = true;
                     drawnPoints.clear();
                     drawnGeoPoints.clear();
                     btnAdd.setText("ZAKLJUCI");
-                    Gdx.app.log("UI", "Način risanja vklopljen.");
-
                     if (editWindow != null) editWindow.remove();
                     selectedMine = null;
-
                 } else {
-                    // KONEC RISANJA
-                    if (drawnGeoPoints.size() < 3) {
-                        Gdx.app.log("UI", "Premalo točk! Vsaj 3.");
-                        return;
-                    }
-
+                    if (drawnGeoPoints.size() < 3) return;
                     Mine newMine = createMineFromGeoPoints(drawnGeoPoints);
-
-                    // Resetiramo stanje
                     isDrawing = false;
                     btnAdd.setText("Dodaj Rudnik");
                     drawnPoints.clear();
-
-                    // Odpremo urejanje
                     selectedMine = newMine;
                     showEditPanel(newMine, true);
                 }
@@ -242,12 +242,10 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         uiTable.add(btnAdd).width(150).height(50);
         stage.addActor(uiTable);
 
-        multiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
-        if (multiplexer == null) {
-            multiplexer = new InputMultiplexer();
-            Gdx.input.setInputProcessor(multiplexer);
-        }
-        multiplexer.addProcessor(0, stage);
+        legend = new Legend(skin, stage);
+
+        InputMultiplexer mainMultiplexer = (InputMultiplexer) Gdx.input.getInputProcessor();
+        mainMultiplexer.addProcessor(0, stage);
     }
 
     @Override
@@ -279,10 +277,23 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         tiledMapRenderer.setView(camera);
         tiledMapRenderer.render();
 
-        drawMines();
-        drawMineEntities(true, true);
+        float ZOOM_THRESHOLD = 1f;
 
-        // risanje
+        if (camera.zoom > ZOOM_THRESHOLD) {
+            drawMineIcons();
+        } else {
+            drawMines();
+            drawMineEntities(true, true);
+        }
+
+        drawIndustries();
+
+//        if(!allPaths.isEmpty()){
+//            for(PathInfo path : allPaths){
+//                drawPath(path.points);
+//            }
+//        }
+
         if (isDrawing && !drawnPoints.isEmpty()) {
             shapeRenderer.setProjectionMatrix(camera.combined);
             shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
@@ -297,7 +308,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             if (drawnPoints.size() > 2) {
                 Vector2 first = drawnPoints.get(0);
                 Vector2 last = drawnPoints.get(drawnPoints.size() - 1);
-                shapeRenderer.setColor(Color.ORANGE); // Oranžna za "zapiralno" črto
+                shapeRenderer.setColor(Color.ORANGE);
                 shapeRenderer.line(last.x, last.y, first.x, first.y);
             }
             shapeRenderer.end();
@@ -310,8 +321,73 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             shapeRenderer.end();
         }
 
+        legend.draw(batch, shapeRenderer);
+
         stage.act(Gdx.graphics.getDeltaTime());
         stage.draw();
+    }
+
+    private void drawMineIcons() {
+        if (myMines == null || myMines.isEmpty()) return;
+
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float iconSize = 25f * camera.zoom;
+        float halfSize = iconSize / 2f;
+
+        for (Mine mine : myMines) {
+            if (mine.geometry == null || mine.geometry.isEmpty()) continue;
+            double sumLat = 0;
+            double sumLng = 0;
+            int count = 0;
+
+            try {
+                float[][][] poly = mine.geometry.get(0).coordinates[0];
+                for(int i=0; i<poly[0].length; i++) {
+                    sumLat += poly[0][i][0];
+                    sumLng += poly[0][i][1];
+                    count++;
+                }
+            } catch (Exception e) { continue; }
+
+            if (count == 0) continue;
+
+            double centerLat = sumLat / count;
+            double centerLng = sumLng / count;
+
+            Vector2 pos = MapRasterTiles.getPixelPosition(centerLng, centerLat, beginTile.x, beginTile.y);
+
+            if (camera.frustum.pointInFrustum(pos.x, pos.y, 0)) {
+                batch.draw(mineIcon, pos.x - halfSize, pos.y - halfSize, iconSize, iconSize);
+            }
+        }
+        batch.end();
+    }
+
+    private void drawIndustries() {
+        if (industries == null || industries.isEmpty()) return;
+
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        float iconSize = 30f * camera.zoom;
+        if(camera.zoom < 1) iconSize = 60f * camera.zoom;
+        float halfSize = iconSize / 2f;
+
+        for (Industry ind : industries) {
+            Vector2 pos = MapRasterTiles.getPixelPosition(ind.lat, ind.lng, beginTile.x, beginTile.y);
+
+            boolean isVisible = pos.x > camera.position.x - (camera.viewportWidth * camera.zoom) &&
+                pos.x < camera.position.x + (camera.viewportWidth * camera.zoom) &&
+                pos.y > camera.position.y - (camera.viewportHeight * camera.zoom) &&
+                pos.y < camera.position.y + (camera.viewportHeight * camera.zoom);
+
+            if (isVisible) {
+                batch.draw(factoryIcon, pos.x - halfSize, pos.y - halfSize, iconSize, iconSize);
+            }
+        }
+        batch.end();
     }
 
     private void drawMineEntities(boolean showWorkers, boolean showInfra) {
@@ -319,6 +395,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        float delta = Gdx.graphics.getDeltaTime();
 
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
@@ -330,7 +408,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     float[][][] polygonData = border.coordinates[i];
                     if (polygonData.length == 0) continue;
 
-                    // samo enkrat za rudnik izracunamo gi lehko risemo
                     float[][] outerRing = polygonData[0];
                     float[] vertices = new float[outerRing.length * 2];
                     float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
@@ -348,16 +425,28 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     }
                     Polygon libGdxPolygon = new Polygon(vertices);
 
-                    // inftrastrukture
-                    if (showInfra && mine.getInfrastructures() != null) {
-                        drawRandomDotsInPolygon(mine.getInfrastructures().size(), libGdxPolygon, minX, maxX, minY, maxY,
-                            Color.RED, 4.0f, mine.getName().hashCode() + 123);
-                    }
-
-                    // workerji
                     if (showWorkers && mine.getWorkers() != null) {
                         drawRandomDotsInPolygon(mine.getWorkers().size(), libGdxPolygon, minX, maxX, minY, maxY,
-                            Color.ORANGE, 3.0f, mine.getName().hashCode());
+                            Color.YELLOW, 4.0f, mine.getName().hashCode() + 123);
+                    }
+
+                    if (showInfra && mine.getInfrastructures() != null) {
+                        for (Infrastructure infra : mine.getInfrastructures()) {
+                            if (infra.isMoving()) {
+                                infra.update(delta, beginTile);
+                                if (infra.isReturning()) {
+                                    shapeRenderer.setColor(Color.ORANGE);
+                                } else {
+                                    shapeRenderer.setColor(Color.RED);
+                                }
+
+                                Vector2 pos = infra.getCurrentPixelPos();
+                                float size = 5.0f * camera.zoom;
+                                if (size < 2f) size = 2f;
+
+                                shapeRenderer.circle(pos.x, pos.y, size);
+                            }
+                        }
                     }
                 }
             }
@@ -415,7 +504,6 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA, com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
-        // naredimo vse fille
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         for (Mine mine : myMines) {
             if (mine.geometry == null) continue;
@@ -425,8 +513,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     if (polygon.length == 0) continue;
                     float[] vertices = getVertices(polygon[0]);
 
-                    // za izbroni rudnik damo drugo barvo
-                    if (mine == selectedMine) shapeRenderer.setColor(new Color(1f, 1f, 0f, 0.4f)); // Rumena
+                    if (mine == selectedMine) shapeRenderer.setColor(new Color(0f, 1f, 0f, 0.4f)); // Rumena
                     else shapeRenderer.setColor(new Color(0.2f, 0.5f, 1f, 0.3f)); // Modra
 
                     try {
@@ -475,9 +562,45 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         return vertices;
     }
 
+    public void drawPath(PointList path){
+        if(path == null || path.isEmpty()){
+            return;
+        }
+
+        Color randomColor = new Color(
+            (float)Math.random(),
+            (float)Math.random(),
+            (float)Math.random(),
+            1f
+        );
+
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(Color.LIGHT_GRAY);
+//        shapeRenderer.setColor(1f, 1f, 0f, 0.5f);
+
+        float lineWidth = 10f * camera.zoom;
+
+        for(int i = 0; i < path.size() - 1; i++){
+            double lat1 = path.getLat(i);
+            double lon1 = path.getLon(i);
+            double lat2 = path.getLat(i+1);
+            double lon2 = path.getLon(i+1);
+
+            Vector2 point1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y);
+            Vector2 point2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y);
+
+            shapeRenderer.rectLine(point1.x, point1.y, point2.x, point2.y, lineWidth);
+        }
+        shapeRenderer.end();
+    }
+
     @Override
     public void dispose() {
         shapeRenderer.dispose();
+        if (batch != null) batch.dispose();
+        if (factoryIcon != null) factoryIcon.dispose();
+        if (mineIcon != null) mineIcon.dispose();
     }
 
     @Override
@@ -750,6 +873,23 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                 updateInfrastructureList(mine, newInfraCount);
 
                 if (isNew) {
+                    if(!mine.getInfrastructures().isEmpty()){
+                        int randomNum = (int)(Math.random() * (industries.size() - 1));
+                        Industry industry = industries.get(randomNum);
+                        PathInfo points = InfrastructurePath.findPath(
+                            mine.getLat(),
+                            mine.getLon(),
+                            industry.lat,
+                            industry.lng
+                        );
+                        if (points != null) {
+                            allPaths.add(points);
+                            for (Infrastructure infra : mine.getInfrastructures()) {
+                                infra.setPath(PathInfo.points);
+                            }
+                        }
+                    }
+
                     localMines.add(mine);
                     myMines.add(mine);
                 }
