@@ -20,6 +20,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class MapRasterTiles {
     //Mapbox
@@ -39,7 +42,15 @@ public class MapRasterTiles {
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
     final static public int TILE_SIZE = 512;
 
-    private static final ExecutorService executor = Executors.newFixedThreadPool(8);
+    private static final PriorityBlockingQueue<Runnable> queue = new PriorityBlockingQueue<>();
+
+    // 2. Initialize the executor with this queue
+// Core pool size 4, Max 4 (adjust based on your needs)
+    public static final ThreadPoolExecutor executor = new ThreadPoolExecutor(
+        4, 4,
+        0L, TimeUnit.MILLISECONDS,
+        queue
+    );
 
     // Max cache 64 tiles
     private static final Map<String, Texture> tileCache = new java.util.LinkedHashMap<String, Texture>(100, 0.75f, true) {
@@ -56,7 +67,7 @@ public class MapRasterTiles {
     private static final java.util.Set<String> downloadingTiles = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     // dinamični load
-    public static void loadTileAsync(int zoom, int x, int y, TileLoadedCallback callback) {
+    public static void loadTileAsync(int zoom, int x, int y, int centerX, int centerY, TileLoadedCallback callback) {
         int maxTiles = (1 << zoom);
         int wrappedX = x % maxTiles;
         if (wrappedX < 0) wrappedX += maxTiles;
@@ -75,7 +86,10 @@ public class MapRasterTiles {
 
         downloadingTiles.add(key);
 
-        executor.submit(() -> {
+        double priority = Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2);
+
+        // 4. Create the actual loading logic
+        Runnable loader = () -> {
             try {
                 URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + finalX + "/" + y + format + token);
                 byte[] data = fetchTileBytes(url);
@@ -101,7 +115,9 @@ public class MapRasterTiles {
                 downloadingTiles.remove(key);
                 Gdx.app.error("MapRasterTiles", "Failed tile: " + key);
             }
-        });
+        };
+
+        executor.execute(new TileLoadTask(priority, loader));
     }
 
     private static byte[] fetchTileBytes(URL url) throws IOException {

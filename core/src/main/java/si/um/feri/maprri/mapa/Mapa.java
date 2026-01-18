@@ -599,23 +599,24 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
     private void loadTilesAsync(TiledMapTileLayer layer) {
         int size = Constants.NUM_TILES;
 
+        int centerX = beginTile.x + (size / 2);
+        int centerY = beginTile.y + (size / 2);
+
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
 
-                // Izračun X Y za ploščico
                 final int tileX = beginTile.x + i;
-                final int tileY = beginTile.y + (size - 1 - j); // flipnen j
+                final int tileY = beginTile.y + (size - 1 - j);
 
                 final int cellX = i;
                 final int cellY = j;
 
-                MapRasterTiles.loadTileAsync(currentMapZoom, tileX, tileY, new MapRasterTiles.TileLoadedCallback() {
+                MapRasterTiles.loadTileAsync(currentMapZoom, tileX, tileY, centerX, centerY, new MapRasterTiles.TileLoadedCallback() {
                     @Override
-                    public void onTileLoaded(Texture texture, int x, int y) { // ko je nalozena slika
+                    public void onTileLoaded(Texture texture, int x, int y) {
                         TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
                         cell.setTile(new StaticTiledMapTile(new TextureRegion(texture)));
-
-                        layer.setCell(cellX, cellY, cell); // setnemo v naš layer
+                        layer.setCell(cellX, cellY, cell);
                     }
                 });
             }
