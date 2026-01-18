@@ -76,7 +76,8 @@ public class MineFactory {
                 defaultStatus,
                 System.currentTimeMillis(),
                 0f,
-                0
+                0,
+                0f
             );
             list.add(infra);
         }

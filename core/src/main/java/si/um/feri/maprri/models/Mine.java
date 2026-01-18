@@ -212,6 +212,8 @@ public class Mine implements Json.Serializable {
         return infrastructure;
     }
 
+    public List<Mineral> getMinerals(){ return minerals; }
+
     public double getLat() { return lat; }
     public double getLon() {return lon;}
 

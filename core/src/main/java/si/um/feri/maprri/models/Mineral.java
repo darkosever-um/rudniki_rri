@@ -6,10 +6,10 @@ import si.um.feri.maprri.models.enums.MineralGrade;
 import si.um.feri.maprri.models.enums.MineralName;
 
 public class Mineral implements Json.Serializable {
-    MineralName name;
-    private Float min;
-    private Float max;
-    MineralGrade grade;
+    public MineralName name;
+    public Float min;
+    public Float max;
+    public MineralGrade grade;
 
     // funkcija preveri če sta grade in ime iz svojih enum datotek
     public boolean validateMineral(){

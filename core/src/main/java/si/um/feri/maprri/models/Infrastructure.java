@@ -11,25 +11,26 @@ import si.um.feri.maprri.mapa.utils.MapRasterTiles;
 import si.um.feri.maprri.mapa.utils.ZoomXY;
 
 public class Infrastructure implements Json.Serializable {
-    private String brand;
-    private String model;
-    private Integer IDNumber;
-    InfrastructureStatus status;
-    private long lastMaintenance;
-    private float operatingHours;
-    private Integer kilometer;
+    public String brand;
+    public String model;
+    public Integer IDNumber;
+    public InfrastructureStatus status;
+    public long lastMaintenance;
+    public float operatingHours;
+    public Integer kilometer;
+    public double avgFuelConsumption;
 
     public Infrastructure(){}
 
     // za animacijo start
-    private PointList path;
-    private int currentPointIndex = 0;
-    private float progress = 0;
-    private float speed;
-    private Vector2 currentPixelPos = new Vector2();
-    private boolean hasPath = false;
-    private boolean returning = false;
-    private float waitTimer = 0;
+    public PointList path;
+    public int currentPointIndex = 0;
+    public float progress = 0;
+    public float speed;
+    public Vector2 currentPixelPos = new Vector2();
+    public boolean hasPath = false;
+    public boolean returning = false;
+    public float waitTimer = 0;
     // za animacijo end
 
     public Infrastructure(String brand,
@@ -38,7 +39,7 @@ public class Infrastructure implements Json.Serializable {
                           InfrastructureStatus status,
                           long lastMaintenance,
                           float operatingHours,
-                          Integer kilometer){
+                          Integer kilometer, double avgFuelConsumption){
         this.brand = brand;
         this.model = model;
         this.IDNumber = IDNumber;
@@ -46,6 +47,7 @@ public class Infrastructure implements Json.Serializable {
         this.lastMaintenance = lastMaintenance;
         this.operatingHours = operatingHours;
         this.kilometer = kilometer;
+        this.avgFuelConsumption = avgFuelConsumption;
     }
 
     public Infrastructure(Infrastructure infrastructure){
@@ -56,6 +58,7 @@ public class Infrastructure implements Json.Serializable {
         this.lastMaintenance = infrastructure.lastMaintenance;
         this.operatingHours = infrastructure.operatingHours;
         this.kilometer = infrastructure.kilometer;
+        this.avgFuelConsumption = infrastructure.avgFuelConsumption;
     }
 
 
@@ -90,6 +93,7 @@ public class Infrastructure implements Json.Serializable {
 
         json.writeValue("operatingHours", operatingHours);
         json.writeValue("kilometer", kilometer);
+        json.writeValue("avgFuelConsumption", avgFuelConsumption);
     }
 
     @Override
@@ -107,6 +111,7 @@ public class Infrastructure implements Json.Serializable {
 
         operatingHours = jsonValue.getFloat("operatingHours", 0.00F);
         kilometer = jsonValue.getInt("kilometer", 0);
+        avgFuelConsumption = jsonValue.getFloat("avgFuelConsumption", 0.0F);
     }
 
     public String toString(){
@@ -116,7 +121,8 @@ public class Infrastructure implements Json.Serializable {
             + "Status: " + status + "\n"
         + "Last maintenance: " + lastMaintenance + "\n"
         + "Operation hours: " + operatingHours + "\n"
-        + "Kilometers: " + kilometer + "\n";
+        + "Kilometers: " + kilometer + "\n"
+        + "avg fuel consumption: " + avgFuelConsumption + "\n";
     }
 
     public void setPath(PointList pointList) {
