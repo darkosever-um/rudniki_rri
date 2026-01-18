@@ -52,6 +52,11 @@ public class MapRasterTiles {
         queue
     );
 
+    public static void clearQueue() {
+        queue.clear();
+        downloadingTiles.clear();
+    }
+
     // Max cache 64 tiles
     private static final Map<String, Texture> tileCache = new java.util.LinkedHashMap<String, Texture>(100, 0.75f, true) {
         @Override
@@ -88,7 +93,6 @@ public class MapRasterTiles {
 
         double priority = Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2);
 
-        // 4. Create the actual loading logic
         Runnable loader = () -> {
             try {
                 URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + finalX + "/" + y + format + token);
@@ -98,14 +102,12 @@ public class MapRasterTiles {
 
                 Gdx.app.postRunnable(() -> {
                     downloadingTiles.remove(key);
-
                     if (tileCache.containsKey(key)) {
                         pixmap.dispose();
                         callback.onTileLoaded(tileCache.get(key), x, y);
                     } else {
                         Texture texture = new Texture(pixmap);
                         texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-
                         tileCache.put(key, texture);
                         pixmap.dispose();
                         callback.onTileLoaded(texture, x, y);
@@ -113,7 +115,6 @@ public class MapRasterTiles {
                 });
             } catch (IOException e) {
                 downloadingTiles.remove(key);
-                Gdx.app.error("MapRasterTiles", "Failed tile: " + key);
             }
         };
 
@@ -316,29 +317,27 @@ public class MapRasterTiles {
      * @param height     viewport height
      * @return
      */
-    public static Vector2 getPixelPosition(double lat, double lng, int tileSize, int zoom, int beginTileX, int beginTileY, int height) {
-        double[] worldCoordinate = project(lat, lng, tileSize);
-        // Scale to fit our image
-        double scale = Math.pow(2, zoom);
-
-        // Apply scale to world coordinates to get image coordinates
-        return new Vector2(
-                (int) (Math.floor(worldCoordinate[0] * scale) - (beginTileX * tileSize)),
-                height - (int) (Math.floor(worldCoordinate[1] * scale) - (beginTileY * tileSize) - 1)
-        );
-    }
-
     public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY, int currentZoom) {
         double[] worldCoordinate = project(lat, lng, MapRasterTiles.TILE_SIZE);
-        // Scale to fit our image
         double scale = Math.pow(2, currentZoom);
 
-        // Apply scale to world coordinates to get image coordinates
-        return new Vector2(
-                (int) (Math.floor(worldCoordinate[0] * scale) - (beginTileX * MapRasterTiles.TILE_SIZE)),
-                Constants.MAP_HEIGHT - (int) (Math.floor(worldCoordinate[1] * scale) - (beginTileY * MapRasterTiles.TILE_SIZE) - 1)
-        );
+        double worldPixelX = worldCoordinate[0] * scale;
+        double worldPixelY = worldCoordinate[1] * scale;
+
+        double tileOffsetX = beginTileX * MapRasterTiles.TILE_SIZE;
+        double tileOffsetY = beginTileY * MapRasterTiles.TILE_SIZE;
+
+        float finalX = (float) (worldPixelX - tileOffsetX);
+
+        float finalY = (float) (Constants.MAP_HEIGHT - (worldPixelY - tileOffsetY) - 1.0f);
+
+        return new Vector2(finalX, finalY);
     }
+
+    public static Vector2 getPixelPosition(double lat, double lng, int tileSize, int zoom, int beginTileX, int beginTileY, int height) {
+        return getPixelPosition(lat, lng, beginTileX, beginTileY, zoom);
+    }
+
 
     public static Geolocation[][] fetchPath(Geolocation[] geolocations){
         // Example coordinates (longitude, latitude)

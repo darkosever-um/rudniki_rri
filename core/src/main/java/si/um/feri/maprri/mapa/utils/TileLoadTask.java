@@ -1,19 +1,21 @@
 package si.um.feri.maprri.mapa.utils;
 
 class TileLoadTask implements Runnable, Comparable<TileLoadTask> {
-    private final double distance;
+    private final double priority;
     private final Runnable task;
 
-    public TileLoadTask(double distance, Runnable task) {
-        this.distance = distance;
+    public TileLoadTask(double priority, Runnable task) {
+        this.priority = priority;
         this.task = task;
     }
 
     @Override
-    public void run() { task.run(); }
+    public void run() {
+        task.run();
+    }
 
     @Override
     public int compareTo(TileLoadTask o) {
-        return Double.compare(this.distance, o.distance);
+        return Double.compare(this.priority, o.priority);
     }
 }

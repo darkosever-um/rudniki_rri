@@ -826,6 +826,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         if (zoomIn && currentMapZoom >= 19) return;
         if (!zoomIn && currentMapZoom <= 2) return;
 
+        MapRasterTiles.clearQueue();
+
         // GeoLocation kot anchor
         Geolocation centerGeo = si.um.feri.maprri.mapa.utils.GeoUtils.unprojectMapCoordinates(
             camera.position.x,
