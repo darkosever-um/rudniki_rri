@@ -356,7 +356,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             double centerLat = sumLat / count;
             double centerLng = sumLng / count;
 
-            Vector2 pos = MapRasterTiles.getPixelPosition(centerLng, centerLat, beginTile.x, beginTile.y);
+            Vector2 pos = MapRasterTiles.getPixelPosition(centerLng, centerLat, beginTile.x, beginTile.y, currentMapZoom);
 
             if (camera.frustum.pointInFrustum(pos.x, pos.y, 0)) {
                 batch.draw(mineIcon, pos.x - halfSize, pos.y - halfSize, iconSize, iconSize);
@@ -376,7 +376,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         float halfSize = iconSize / 2f;
 
         for (Industry ind : industries) {
-            Vector2 pos = MapRasterTiles.getPixelPosition(ind.lat, ind.lng, beginTile.x, beginTile.y);
+            Vector2 pos = MapRasterTiles.getPixelPosition(ind.lat, ind.lng, beginTile.x, beginTile.y, currentMapZoom);
 
             boolean isVisible = pos.x > camera.position.x - (camera.viewportWidth * camera.zoom) &&
                 pos.x < camera.position.x + (camera.viewportWidth * camera.zoom) &&
@@ -433,7 +433,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
                     if (showInfra && mine.getInfrastructures() != null) {
                         for (Infrastructure infra : mine.getInfrastructures()) {
                             if (infra.isMoving()) {
-                                infra.update(delta, beginTile);
+                                infra.update(delta, beginTile, currentMapZoom);
                                 if (infra.isReturning()) {
                                     shapeRenderer.setColor(Color.ORANGE);
                                 } else {
@@ -587,8 +587,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
             double lat2 = path.getLat(i+1);
             double lon2 = path.getLon(i+1);
 
-            Vector2 point1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y);
-            Vector2 point2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y);
+            Vector2 point1 = MapRasterTiles.getPixelPosition(lat1, lon1, beginTile.x, beginTile.y, currentMapZoom);
+            Vector2 point2 = MapRasterTiles.getPixelPosition(lat2, lon2, beginTile.x, beginTile.y, currentMapZoom);
 
             shapeRenderer.rectLine(point1.x, point1.y, point2.x, point2.y, lineWidth);
         }

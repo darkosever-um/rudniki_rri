@@ -129,7 +129,7 @@ public class Infrastructure implements Json.Serializable {
         }
     }
 
-    public void update(float delta, ZoomXY beginTile) {
+    public void update(float delta, ZoomXY beginTile, int zoom) {
         if (!hasPath) return;
 
         if (waitTimer > 0) {
@@ -144,8 +144,8 @@ public class Infrastructure implements Json.Serializable {
             return;
         }
 
-        Vector2 p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y);
-        Vector2 p2 = MapRasterTiles.getPixelPosition(path.getLat(nextIdx), path.getLon(nextIdx), beginTile.x, beginTile.y);
+        Vector2 p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y, zoom);
+        Vector2 p2 = MapRasterTiles.getPixelPosition(path.getLat(nextIdx), path.getLon(nextIdx), beginTile.x, beginTile.y, zoom);
 
         float segmentDistance = p1.dst(p2);
 
@@ -164,11 +164,11 @@ public class Infrastructure implements Json.Serializable {
             }
         }
 
-        p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y);
+        p1 = MapRasterTiles.getPixelPosition(path.getLat(currentPointIndex), path.getLon(currentPointIndex), beginTile.x, beginTile.y, zoom);
         int p2Idx = returning ? currentPointIndex - 1 : currentPointIndex + 1;
         if (p2Idx < 0) p2Idx = 0;
         if (p2Idx >= path.size()) p2Idx = path.size() - 1;
-        p2 = MapRasterTiles.getPixelPosition(path.getLat(p2Idx), path.getLon(p2Idx), beginTile.x, beginTile.y);
+        p2 = MapRasterTiles.getPixelPosition(path.getLat(p2Idx), path.getLon(p2Idx), beginTile.x, beginTile.y, zoom);
 
         currentPixelPos.x = MathUtils.lerp(p1.x, p2.x, Math.min(progress, 1.0f));
         currentPixelPos.y = MathUtils.lerp(p1.y, p2.y, Math.min(progress, 1.0f));
