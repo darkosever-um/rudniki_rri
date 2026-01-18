@@ -257,22 +257,21 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         handleInput();
 
-        boolean mapChanged = false;
+        float centerX = Constants.MAP_WIDTH / 2f;
+        float centerY = Constants.MAP_HEIGHT / 2f;
+
+        float threshold = MapRasterTiles.TILE_SIZE * 0.5f;
+
+        if (Math.abs(camera.position.x - centerX) > threshold ||
+            Math.abs(camera.position.y - centerY) > threshold) {
+            updateTiles();
+        }
 
         if (camera.zoom < 0.5f) {
             changeMapZoom(true);
         }
         else if (camera.zoom > 2.0f) {
             changeMapZoom(false);
-        }
-        else {
-            float centerX = Constants.MAP_WIDTH / 2f;
-            float centerY = Constants.MAP_HEIGHT / 2f;
-
-            if (Math.abs(camera.position.x - centerX) > MapRasterTiles.TILE_SIZE ||
-                Math.abs(camera.position.y - centerY) > MapRasterTiles.TILE_SIZE) {
-                updateTiles();
-            }
         }
 
         camera.update();
@@ -791,30 +790,21 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
     // Funkcija preveri, ki je kamera da lahko naložimo nove tile
     private void updateTiles() {
-        // Sredina
-        Geolocation centerGeo = si.um.feri.maprri.mapa.utils.GeoUtils.unprojectMapCoordinates(
-            camera.position.x,
-            camera.position.y,
-            beginTile
-        );
+        float centerX = Constants.MAP_WIDTH / 2f;
+        float centerY = Constants.MAP_HEIGHT / 2f;
 
-        ZoomXY centerTile = MapRasterTiles.getTileNumber(centerGeo.lat, centerGeo.lng, currentMapZoom);
-        beginTile = new ZoomXY(currentMapZoom,
-            centerTile.x - ((Constants.NUM_TILES - 1) / 2),
-            centerTile.y - ((Constants.NUM_TILES - 1) / 2)
-        );
+        float diffX = camera.position.x - centerX;
+        float diffY = camera.position.y - centerY;
 
-        Vector2 precisePosition = MapRasterTiles.getPixelPosition(
-            centerGeo.lat,
-            centerGeo.lng,
-            MapRasterTiles.TILE_SIZE,
-            currentMapZoom,
-            beginTile.x,
-            beginTile.y,
-            Constants.MAP_HEIGHT
-        );
+        int tilesMovedX = Math.round(diffX / MapRasterTiles.TILE_SIZE);
+        int tilesMovedY = Math.round(diffY / MapRasterTiles.TILE_SIZE);
 
-        camera.position.set(precisePosition.x, precisePosition.y, 0);
+        if (tilesMovedX == 0 && tilesMovedY == 0) return;
+
+        beginTile.x += tilesMovedX;
+        beginTile.y -= tilesMovedY;
+
+        camera.translate(-tilesMovedX * MapRasterTiles.TILE_SIZE, -tilesMovedY * MapRasterTiles.TILE_SIZE);
         camera.update();
 
         TiledMapTileLayer layer = (TiledMapTileLayer) tiledMap.getLayers().get(0);
