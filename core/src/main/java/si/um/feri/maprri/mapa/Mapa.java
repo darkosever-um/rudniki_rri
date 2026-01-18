@@ -268,11 +268,11 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
 
         drawIndustries();
 
-        if(!allPaths.isEmpty()){
-            for(PathInfo path : allPaths){
-                drawPath(path.points);
-            }
-        }
+//        if(!allPaths.isEmpty()){
+//            for(PathInfo path : allPaths){
+//                drawPath(path.points);
+//            }
+//        }
 
         if (isDrawing && !drawnPoints.isEmpty()) {
             shapeRenderer.setProjectionMatrix(camera.combined);
@@ -352,7 +352,7 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         batch.begin();
 
         float iconSize = 30f * camera.zoom;
-        if(camera.zoom < 1) iconSize = 30f;
+        if(camera.zoom < 1) iconSize = 60f * camera.zoom;
         float halfSize = iconSize / 2f;
 
         for (Industry ind : industries) {
