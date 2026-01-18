@@ -25,17 +25,24 @@
     import com.badlogic.gdx.math.Polygon;
     import com.badlogic.gdx.math.Vector2;
     import com.badlogic.gdx.math.Vector3;
+    import com.badlogic.gdx.scenes.scene2d.Actor;
     import com.badlogic.gdx.scenes.scene2d.InputEvent;
     import com.badlogic.gdx.scenes.scene2d.Stage;
     import com.badlogic.gdx.scenes.scene2d.ui.*;
+    import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
     import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
     import com.badlogic.gdx.utils.ScreenUtils;
     import com.badlogic.gdx.utils.Select;
     import com.badlogic.gdx.utils.ShortArray;
 
+    import java.time.LocalDate;
+    import java.time.format.DateTimeFormatter;
     import java.util.ArrayList;
+    import java.util.HashMap;
     import java.util.List;
+    import java.util.Map;
 
+    import com.badlogic.gdx.utils.Timer;
     import com.graphhopper.util.PointList;
     import org.w3c.dom.Text;
     import si.um.feri.maprri.ServerController;
@@ -45,6 +52,8 @@
     import si.um.feri.maprri.mapa.utils.MapRasterTiles;
     import si.um.feri.maprri.mapa.utils.ZoomXY;
     import si.um.feri.maprri.models.*;
+    import si.um.feri.maprri.models.enums.InfrastructureStatus;
+    import si.um.feri.maprri.models.enums.MineralName;
     import si.um.feri.maprri.models.enums.WorkerType;
     import si.um.feri.maprri.util.InfrastructurePath;
     import si.um.feri.maprri.util.NetworkCallback;
@@ -53,6 +62,7 @@
     import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
     import si.um.feri.maprri.mapa.utils.LoadIndustry;
+    import si.um.feri.maprri.util.Simulation;
     import sun.security.tools.PathList;
 
     import javax.swing.*;
@@ -944,18 +954,23 @@
             stage.setKeyboardFocus(nameField);
         }
 
-        private void showSimulationWindow(Mine mine){
-            Window simulationWindow = new Window("SIMULATION", skin);
-            simulationWindow.setSize(800,600);
+        private void showSimulationWindow(Mine mine) {
+            final Simulation simulation = new Simulation(mine);
+
+            final Window simulationWindow = new Window("SIMULATION", skin);
+            simulationWindow.setSize(900, 700);
             simulationWindow.setModal(true);
             simulationWindow.setMovable(true);
-            simulationWindow.setPosition(stage.getWidth()/2-400, stage.getHeight()/2-300);
+            simulationWindow.setPosition(stage.getWidth() / 2 - 450, stage.getHeight() / 2 - 350);
 
-            //Scroll pane
+            final Map<Integer, Label> workerStatusLabels = new HashMap<>();
+            final Map<Integer, Label> infraStatusLabels = new HashMap<>();
+            final Map<si.um.feri.maprri.models.enums.MineralName, Label> mineralMinedLabels = new HashMap<>();
+
             Table contentTable = new Table();
             contentTable.top().left().pad(20);
 
-            //Section 1
+            // Section 1: Konfiguracija
             Label titleInput = new Label("1. Konfiguracija simulacije", skin);
             titleInput.setFontScale(1.1f);
             contentTable.add(titleInput).left().padBottom(10).row();
@@ -964,11 +979,11 @@
             inputTable.left();
 
             inputTable.add(new Label("Datum od (dd.mm.llll): ", skin)).padRight(10);
-            TextField dateFromField = new TextField("", skin);
+            final TextField dateFromField = new TextField("", skin);
             inputTable.add(dateFromField).width(120).padRight(20);
 
             inputTable.add(new Label("Datum do (dd.mm.llll): ", skin)).padRight(10);
-            TextField dateToField = new TextField("", skin);
+            final TextField dateToField = new TextField("", skin);
             inputTable.add(dateToField).width(120).padRight(20);
 
             inputTable.add(new Label("Casovna enota: ", skin)).padRight(10);
@@ -976,117 +991,269 @@
             timeUnitSelectBox.setItems("Ura", "Dan");
             inputTable.add(timeUnitSelectBox).width(100);
 
-            TextButton btnStart = new TextButton("ZACNI", skin);
-            inputTable.add(btnStart).width(100);
-
             contentTable.add(inputTable).left().padBottom(30).row();
 
-            //Section 2
+            // Section 2: Mine Info
             Label titleMineInfo = new Label("Podatki o rudniku", skin);
             titleMineInfo.setFontScale(1.1f);
             contentTable.add(titleMineInfo).left().padBottom(10).row();
+
             Table mineInfoTable = new Table();
             mineInfoTable.left();
 
+            mineInfoTable.add(new Label("Trenutni datum: ", skin)).padRight(5);
+            final Label lblCurrentDate = new Label("-", skin);
+            lblCurrentDate.setColor(Color.YELLOW);
+            mineInfoTable.add(lblCurrentDate).padRight(20);
+            mineInfoTable.row();
+
             mineInfoTable.add(new Label("Ime rudnika: ", skin)).padRight(5);
             mineInfoTable.add(new Label(mine.getName(), skin)).padRight(20);
-            mineInfoTable.add(new Label("Skupni stroski rudnika: ", skin)).padRight(5);
-            //TODO:
-            mineInfoTable.add(new Label(mine.getName(), skin)).padRight(20);
-            mineInfoTable.add(new Label("Dnevni stroski rudnika: ", skin)).padRight(5);
-            //TODO:
-            mineInfoTable.add(new Label(mine.getName(), skin)).padRight(20);
+            mineInfoTable.row();
+
+            mineInfoTable.add(new Label("Skupni stroski: ", skin)).padRight(5);
+            final Label totalExpenses = new Label("0.00 EUR", skin);
+            totalExpenses.setColor(Color.RED);
+            mineInfoTable.add(totalExpenses).padRight(20);
+            mineInfoTable.row();
+
+            mineInfoTable.add(new Label("Dnevni stroski: ", skin)).padRight(5);
+            final Label dailyExpenses = new Label("0.00 EUR", skin);
+            dailyExpenses.setColor(Color.RED);
+            mineInfoTable.add(dailyExpenses).padRight(20);
 
             contentTable.add(mineInfoTable).left().padBottom(20).row();
 
-            //WorkersList
+            // Workers List
             Label titleWorkers = new Label("Delavci", skin);
             titleWorkers.setColor(Color.CYAN);
             contentTable.add(titleWorkers).left().padBottom(5).row();
+
             Table workersTable = new Table();
             workersTable.defaults().left().padRight(15).padBottom(2);
             workersTable.add(new Label("Ime", skin));
             workersTable.add(new Label("Priimek", skin));
             workersTable.add(new Label("Placa", skin));
-            workersTable.add(new Label("Vrsta delavca", skin)).row();
+            workersTable.add(new Label("Vrsta", skin));
+            workersTable.add(new Label("STATUS", skin)).row();
 
-            if(mine.getWorkers() != null){
-                for(Worker worker : mine.getWorkers()){
+            if (mine.getWorkers() != null) {
+                for (Worker worker : mine.getWorkers()) {
                     workersTable.add(new Label(worker.firstName, skin));
                     workersTable.add(new Label(worker.lastName, skin));
                     workersTable.add(new Label(String.valueOf(worker.salary), skin));
-                    workersTable.add(new Label(WorkerType.values()[worker.type].name(), skin)).row();
+                    workersTable.add(new Label(WorkerType.values()[worker.type].name(), skin));
+
+                    Label statusLabel = new Label("-", skin);
+                    workerStatusLabels.put(worker.idNumber, statusLabel);
+                    workersTable.add(statusLabel).row();
                 }
             }
             contentTable.add(workersTable).left().padBottom(20).row();
-            //InfrastructureList
+
+            // Infrastructure List
             Label titleInfrastructure = new Label("Infrastruktura", skin);
             titleInfrastructure.setColor(Color.CYAN);
             contentTable.add(titleInfrastructure).left().padBottom(5).row();
+
             Table infrastructureTable = new Table();
             infrastructureTable.defaults().left().padRight(15).padBottom(2);
             infrastructureTable.add(new Label("Znamka", skin));
             infrastructureTable.add(new Label("Model", skin));
-            infrastructureTable.add(new Label("Povp. poraba", skin));
-            infrastructureTable.add(new Label("Status", skin));
-            infrastructureTable.add(new Label("Naslednji servis", skin));
-            infrastructureTable.add(new Label("Delovne ure", skin));
-            infrastructureTable.add(new Label("Prevozenih km.", skin)).row();
-            if(mine.getInfrastructures() != null){
-                for(Infrastructure infrastructure : mine.getInfrastructures()){
+            infrastructureTable.add(new Label("Status (Original)", skin));
+            infrastructureTable.add(new Label("SIM STATUS", skin)).row();
+
+            if (mine.getInfrastructures() != null) {
+                for (Infrastructure infrastructure : mine.getInfrastructures()) {
                     infrastructureTable.add(new Label(infrastructure.brand, skin));
                     infrastructureTable.add(new Label(infrastructure.model, skin));
-                    infrastructureTable.add(new Label(String.valueOf(infrastructure.avgFuelConsumption), skin));
                     infrastructureTable.add(new Label(infrastructure.status.name(), skin));
-                    infrastructureTable.add(new Label(String.valueOf(infrastructure.lastMaintenance), skin));
-                    infrastructureTable.add(new Label(String.valueOf(infrastructure.operatingHours), skin));
-                    infrastructureTable.add(new Label(String.valueOf(infrastructure.kilometer), skin)).row();
+
+                    Label infraLabel = new Label("-", skin);
+                    infraStatusLabels.put(infrastructure.IDNumber, infraLabel);
+                    infrastructureTable.add(infraLabel).row();
                 }
             }
             contentTable.add(infrastructureTable).left().padBottom(20).row();
-            //MineralsList
+
+            // Minerals List
             Label titleMinerals = new Label("Minerali", skin);
             titleMinerals.setColor(Color.CYAN);
             contentTable.add(titleMinerals).left().padBottom(5).row();
+
             Table mineralsTable = new Table();
             mineralsTable.defaults().left().padRight(15).padBottom(2);
             mineralsTable.add(new Label("Ime", skin));
-            mineralsTable.add(new Label("Kvaliteta", skin));
-            mineralsTable.add(new Label("Min", skin));
-            mineralsTable.add(new Label("Max", skin));
             mineralsTable.add(new Label("Izkopano danes", skin)).row();
-            if(mine.getMinerals() != null){
-                for(Mineral mineral : mine.getMinerals()){
+
+            if (mine.getMinerals() != null) {
+                for (Mineral mineral : mine.getMinerals()) {
                     mineralsTable.add(new Label(mineral.name.name(), skin));
-                    mineralsTable.add(new Label(mineral.grade.name(), skin));
-                    mineralsTable.add(new Label(String.valueOf(mineral.min), skin));
-                    mineralsTable.add(new Label(String.valueOf(mineral.max), skin));
-                    //TODO:
-                    mineralsTable.add(new Label(String.valueOf(mineral.min), skin)).row();
+                    Label minedLabel = new Label("0.0", skin);
+                    mineralMinedLabels.put(mineral.name, minedLabel);
+                    mineralsTable.add(minedLabel).row();
                 }
             }
-
             contentTable.add(mineralsTable).left().padBottom(20).row();
+
             ScrollPane scrollPane = new ScrollPane(contentTable, skin);
             scrollPane.setFadeScrollBars(true);
             scrollPane.setScrollingDisabled(true, false);
 
             simulationWindow.add(scrollPane).grow().row();
 
-            TextButton btnClose = new TextButton("NAZAJ", skin);
-            btnClose.addListener(new ClickListener(){
+            final com.badlogic.gdx.scenes.scene2d.ui.Slider progressSlider = new com.badlogic.gdx.scenes.scene2d.ui.Slider(0, 100, 1, false, skin);
+            final Label progressLabel = new Label("Korak: 0 / 0", skin);
+
+            class UIUpdater {
+                public void updateUI(SimulationHistory step) {
+                    if (step == null) return;
+
+                    lblCurrentDate.setText(step.date.toString());
+
+                    totalExpenses.setText(String.format("%.2f EUR", simulation.totalExpenses));
+                    dailyExpenses.setText(String.format("%.2f EUR", step.expenses));
+
+                    progressLabel.setText("Korak: " + step.step + " / " + (int)progressSlider.getMaxValue());
+
+                    for (java.util.Map.Entry<Integer, Label> entry : workerStatusLabels.entrySet()) {
+                        int wId = entry.getKey();
+                        Label lbl = entry.getValue();
+                        if (step.workerAttendance.containsKey(wId)) {
+                            boolean present = step.workerAttendance.get(wId);
+                            lbl.setText(present ? "PRISOTEN" : "ODSOTEN");
+                            lbl.setColor(present ? Color.GREEN : Color.RED);
+                        } else {
+                            lbl.setText("-");
+                        }
+                    }
+
+                    for (InfrastructureSimStep infStep : step.infrastructureSimStepList) {
+                        if (infraStatusLabels.containsKey(infStep.IDNumber)) {
+                            Label lbl = infraStatusLabels.get(infStep.IDNumber);
+                            lbl.setText(infStep.status.name());
+
+                            if (infStep.status == InfrastructureStatus.BROKEN) lbl.setColor(Color.RED);
+                            else if (infStep.status == InfrastructureStatus.ACTIVE) lbl.setColor(Color.GREEN);
+                            else lbl.setColor(Color.ORANGE);
+                        }
+                    }
+
+                    for (Map.Entry<MineralName, Label> entry : mineralMinedLabels.entrySet()) {
+                        Label lbl = entry.getValue();
+                        if (step.minedAmount.containsKey(entry.getKey())) {
+                            lbl.setText(String.format("%.2f", step.minedAmount.get(entry.getKey())));
+                        } else {
+                            lbl.setText("0.0");
+                        }
+                    }
+                }
+            }
+
+            final UIUpdater uiUpdater = new UIUpdater();
+
+            final Timer.Task simTask = new Timer.Task() {
                 @Override
-                public void clicked(InputEvent event, float x, float y){
+                public void run() {
+                    if (!simulation.isFinished() && simulation.isRunning()) {
+                        simulation.calculateNextStep();
+                        SimulationHistory step = simulation.getLastStep();
+
+                        if (step != null) {
+                            progressSlider.setValue(step.step);
+                            uiUpdater.updateUI(step);
+                        }
+                    } else if (simulation.isFinished()) {
+                        this.cancel();
+                        simulation.setRunning(false);
+                        System.out.println("Simulation finished");
+                    }
+                }
+            };
+
+            progressSlider.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event, Actor actor) {
+                    if (progressSlider.isDragging()) {
+                        simulation.setRunning(false);
+                    }
+
+                    int index = (int) progressSlider.getValue() - 1; // index 0 based, steps 1 based
+                    if (index >= 0 && index < simulation.simulationHistory.size()) {
+                        SimulationHistory historyStep = simulation.simulationHistory.get(index);
+                        uiUpdater.updateUI(historyStep);
+                    }
+                }
+            });
+
+            TextButton btnClose = new TextButton("NAZAJ", skin);
+            TextButton btnStart = new TextButton("ZACNI", skin);
+            TextButton btnStop = new TextButton("STOP", skin);
+
+            btnClose.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    simTask.cancel();
                     simulationWindow.remove();
                 }
             });
-            simulationWindow.add(btnClose).height(50).width(200).pad(10);
-            btnStart.addListener(new ClickListener(){
+
+            btnStart.addListener(new ClickListener() {
                 @Override
-                public void clicked(InputEvent event, float x, float y){
-                    //TODO: Simulate
+                public void clicked(InputEvent event, float x, float y) {
+                    try {
+                        if (!simulation.isRunning() && simulation.simulationHistory.isEmpty()) {
+                            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+                            LocalDate startDate = LocalDate.parse(dateFromField.getText(), dtf);
+                            LocalDate endDate = LocalDate.parse(dateToField.getText(), dtf);
+
+                            if (startDate.isAfter(endDate)) return;
+
+                            simulation.startDate = startDate;
+                            simulation.endDate = endDate;
+                            simulation.stepUnit = timeUnitSelectBox.getSelected();
+                            simulation.reset();
+
+                            long daysBetween = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
+                            if(simulation.stepUnit.equals("Ura")) {
+                                daysBetween *= 24;
+                            }
+
+                            progressSlider.setRange(0, daysBetween);
+                            progressSlider.setValue(0);
+                        }
+
+                        simulation.setRunning(true);
+
+                        if (!simTask.isScheduled()) {
+                            com.badlogic.gdx.utils.Timer.schedule(simTask, 0f, 0.5f);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error: " + e.getMessage());
+                    }
                 }
             });
+
+            btnStop.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    simulation.setRunning(false);
+                }
+            });
+
+            Table controlsTable = new Table();
+            controlsTable.add(new Label("Napredek: ", skin)).padRight(10);
+            controlsTable.add(progressSlider).width(400).padRight(10);
+            controlsTable.add(progressLabel).width(100).row();
+
+            simulationWindow.add(controlsTable).padTop(10).padBottom(10).row();
+
+            Table buttonTable = new Table();
+            buttonTable.add(btnStart).width(150).height(50).padRight(10);
+            buttonTable.add(btnStop).width(150).height(50).padRight(10);
+            buttonTable.add(btnClose).width(150).height(50);
+
+            simulationWindow.add(buttonTable).pad(10);
 
             stage.addActor(simulationWindow);
         }

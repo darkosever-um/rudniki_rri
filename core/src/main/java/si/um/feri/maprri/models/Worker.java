@@ -8,9 +8,10 @@ public class Worker implements Json.Serializable {
     public String lastName;
     public long birthDate;
     public int idNumber;
-    public int type;
+    public Integer type;
     public double salary;
 
+    public double absenceChance = Math.random() * 0.10;
     public Worker() {}
 
     @Override
