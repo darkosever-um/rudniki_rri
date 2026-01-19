@@ -3,7 +3,7 @@ package si.um.feri.maprri.mapa.utils;
 import com.badlogic.gdx.Gdx;
 
 public class Constants {
-    public static final int NUM_TILES = 5; // 3, 5
+    public static final int NUM_TILES = 7; // 3, 5
     public static final int ZOOM = 10; // 15, 9
     public static final int MAP_WIDTH = MapRasterTiles.TILE_SIZE * NUM_TILES;
     public static final int MAP_HEIGHT = MapRasterTiles.TILE_SIZE * NUM_TILES;

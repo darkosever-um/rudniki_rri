@@ -61,7 +61,7 @@ public class MapRasterTiles {
     private static final Map<String, Texture> tileCache = new java.util.LinkedHashMap<String, Texture>(100, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(java.util.Map.Entry<String, Texture> eldest) {
-            if (size() > 64) {
+            if (size() > 128) {
                 eldest.getValue().dispose();
                 return true;
             }
@@ -74,8 +74,14 @@ public class MapRasterTiles {
     // dinamični load
     public static void loadTileAsync(int zoom, int x, int y, int centerX, int centerY, TileLoadedCallback callback) {
         int maxTiles = (1 << zoom);
+
+        if (y < 0 || y >= maxTiles) {
+            return;
+        }
+
         int wrappedX = x % maxTiles;
         if (wrappedX < 0) wrappedX += maxTiles;
+
 
         final int finalX = wrappedX;
         final String key = zoom + "_" + finalX + "_" + y;

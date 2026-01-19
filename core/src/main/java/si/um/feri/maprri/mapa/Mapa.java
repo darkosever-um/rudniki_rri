@@ -132,8 +132,8 @@ public class Mapa extends ApplicationAdapter implements GestureDetector.GestureL
         camera = new OrthographicCamera();
         camera.setToOrtho(false, Constants.MAP_WIDTH, Constants.MAP_HEIGHT);
         camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
-        camera.viewportWidth = Constants.MAP_WIDTH / 2f;
-        camera.viewportHeight = Constants.MAP_HEIGHT / 2f;
+        camera.viewportWidth = (5 * MapRasterTiles.TILE_SIZE) / 2f;
+        camera.viewportHeight = (5 * MapRasterTiles.TILE_SIZE) / 2f;
         camera.zoom = 2f;
         camera.update();
 
