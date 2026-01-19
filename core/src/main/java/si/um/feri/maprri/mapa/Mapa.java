@@ -176,10 +176,13 @@
                                 }
 
                                 PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
-                                System.out.println(temp.toString());
+//                                System.out.println(temp.toString());
                                 assert temp != null;
                                 allPaths.add(temp);
-                                infrastructure.get(i).setPath(temp.points);
+                                assert temp != null;
+                                if(temp != null){
+                                    infrastructure.get(i).setPath(temp.points);
+                                }
                             }
                         }
                     }
@@ -197,25 +200,28 @@
                         }
                         Mine.saveMineListToFile(result);
                         System.out.println("Mines loaded: " + myMines.size());
-                        if (!myMines.isEmpty() && !industries.isEmpty()) {
-                            for(Mine mine : myMines){
-                                List<Infrastructure> infrastructure = mine.getInfrastructures();
-                                for(int i = 0; i < infrastructure.size()-1; i++){
-                                    int randomNum = (int)(Math.random() * (industries.size() - 1));
-                                    Industry industry = industries.get(randomNum);
-
-                                    if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
-                                        continue;
-                                    }
-
-                                    PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
-                                    System.out.println(temp.toString());
-                                    assert temp != null;
-                                    allPaths.add(temp);
-                                    infrastructure.get(i).setPath(temp.points);
-                                }
-                            }
-                        }
+//                        if (!myMines.isEmpty() && !industries.isEmpty()) {
+//                            for(Mine mine : myMines){
+//                                List<Infrastructure> infrastructure = mine.getInfrastructures();
+//                                for(int i = 0; i < infrastructure.size()-1; i++){
+//                                    int randomNum = (int)(Math.random() * (industries.size() - 1));
+//                                    Industry industry = industries.get(randomNum);
+//
+//                                    if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
+//                                        continue;
+//                                    }
+//
+//                                    PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+//                                    System.out.println(temp.toString());
+//                                    assert temp != null;
+//                                    allPaths.add(temp);
+//                                    assert temp != null;
+//                                    if(temp != null) {
+//                                        infrastructure.get(i).setPath(temp.points);
+//                                    }
+//                                }
+//                            }
+//                        }
                     });
                 }
 
@@ -908,28 +914,26 @@
                     if (isNew) {
                         localMines.add(mine);
                         myMines.add(mine);
+                    }else{
+                        List<Infrastructure> infrastructure = mine.getInfrastructures();
+                        for (int i = 0; i < infrastructure.size() - 1; i++) {
+                            int randomNum = (int) (Math.random() * (industries.size() - 1));
+                            Industry industry = industries.get(randomNum);
+                            if (infrastructure.get(i).status != InfrastructureStatus.ACTIVE) {
+                                continue;
+                            }
+                            PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+                            System.out.println(temp.toString());
+                            assert temp != null;
+                            allPaths.add(temp);
+                            infrastructure.get(i).setPath(temp.points);
+                        }
                     }
                     saveLocalMines();
                     editWindow.remove();
                     selectedMine = null;
                 }
             });
-
-            List<Infrastructure> infrastructure = mine.getInfrastructures();
-            for(int i = 0; i < infrastructure.size()-1; i++){
-                int randomNum = (int)(Math.random() * (industries.size() - 1));
-                Industry industry = industries.get(randomNum);
-
-                if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
-                    continue;
-                }
-
-                PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
-                System.out.println(temp.toString());
-                assert temp != null;
-                allPaths.add(temp);
-                infrastructure.get(i).setPath(temp.points);
-            }
 
             btnCancel.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
                 @Override
