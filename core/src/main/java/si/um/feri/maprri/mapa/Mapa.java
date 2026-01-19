@@ -63,7 +63,6 @@
 
     import si.um.feri.maprri.mapa.utils.LoadIndustry;
     import si.um.feri.maprri.util.Simulation;
-    import sun.security.tools.PathList;
 
     import javax.swing.*;
 
@@ -164,25 +163,23 @@
                 InfrastructurePath.init();
 
                 Gdx.app.postRunnable(() -> {
+                    System.out.println("MINES: " + myMines.size());
                     if (!myMines.isEmpty() && !industries.isEmpty()) {
                         for(Mine mine : myMines){
                             List<Infrastructure> infrastructure = mine.getInfrastructures();
                             for(int i = 0; i < infrastructure.size()-1; i++){
                                 int randomNum = (int)(Math.random() * (industries.size() - 1));
                                 Industry industry = industries.get(randomNum);
-                                PathInfo points = InfrastructurePath.findPath(
-                                    mine.getLat(),
-                                    mine.getLon(),
-                                    industry.lat,
-                                    industry.lng
-                                );
-                                if (points != null) {
-                                    allPaths.add(points);
 
-                                    for (Infrastructure infra : mine.getInfrastructures()) {
-                                        infra.setPath(PathInfo.points);
-                                    }
+                                if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
+                                    continue;
                                 }
+
+                                PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+                                System.out.println(temp.toString());
+                                assert temp != null;
+                                allPaths.add(temp);
+                                infrastructure.get(i).setPath(temp.points);
                             }
                         }
                     }
@@ -200,6 +197,25 @@
                         }
                         Mine.saveMineListToFile(result);
                         System.out.println("Mines loaded: " + myMines.size());
+                        if (!myMines.isEmpty() && !industries.isEmpty()) {
+                            for(Mine mine : myMines){
+                                List<Infrastructure> infrastructure = mine.getInfrastructures();
+                                for(int i = 0; i < infrastructure.size()-1; i++){
+                                    int randomNum = (int)(Math.random() * (industries.size() - 1));
+                                    Industry industry = industries.get(randomNum);
+
+                                    if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
+                                        continue;
+                                    }
+
+                                    PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+                                    System.out.println(temp.toString());
+                                    assert temp != null;
+                                    allPaths.add(temp);
+                                    infrastructure.get(i).setPath(temp.points);
+                                }
+                            }
+                        }
                     });
                 }
 
@@ -303,11 +319,11 @@
 
             drawIndustries();
 
-    //        if(!allPaths.isEmpty()){
-    //            for(PathInfo path : allPaths){
-    //                drawPath(path.points);
-    //            }
-    //        }
+//            if(!allPaths.isEmpty()){
+//                for(PathInfo path : allPaths){
+//                    drawPath(path.points);
+//                }
+//            }
 
             if (isDrawing && !drawnPoints.isEmpty()) {
                 shapeRenderer.setProjectionMatrix(camera.combined);
@@ -890,23 +906,6 @@
                     updateInfrastructureList(mine, newInfraCount);
 
                     if (isNew) {
-                        if(!mine.getInfrastructures().isEmpty()){
-                            int randomNum = (int)(Math.random() * (industries.size() - 1));
-                            Industry industry = industries.get(randomNum);
-                            PathInfo points = InfrastructurePath.findPath(
-                                mine.getLat(),
-                                mine.getLon(),
-                                industry.lat,
-                                industry.lng
-                            );
-                            if (points != null) {
-                                allPaths.add(points);
-                                for (Infrastructure infra : mine.getInfrastructures()) {
-                                    infra.setPath(PathInfo.points);
-                                }
-                            }
-                        }
-
                         localMines.add(mine);
                         myMines.add(mine);
                     }
@@ -915,6 +914,22 @@
                     selectedMine = null;
                 }
             });
+
+            List<Infrastructure> infrastructure = mine.getInfrastructures();
+            for(int i = 0; i < infrastructure.size()-1; i++){
+                int randomNum = (int)(Math.random() * (industries.size() - 1));
+                Industry industry = industries.get(randomNum);
+
+                if(infrastructure.get(i).status != InfrastructureStatus.ACTIVE){
+                    continue;
+                }
+
+                PathInfo temp = InfrastructurePath.findPath(mine.getLat(), mine.getLon(), industry.lat, industry.lng);
+                System.out.println(temp.toString());
+                assert temp != null;
+                allPaths.add(temp);
+                infrastructure.get(i).setPath(temp.points);
+            }
 
             btnCancel.addListener(new com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
                 @Override
@@ -959,7 +974,7 @@
 
             final Window simulationWindow = new Window("SIMULATION", skin);
             simulationWindow.setSize(900, 700);
-            simulationWindow.setModal(true);
+//            simulationWindow.setModal(true);
             simulationWindow.setMovable(true);
             simulationWindow.setPosition(stage.getWidth() / 2 - 450, stage.getHeight() / 2 - 350);
 
